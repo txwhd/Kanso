@@ -811,7 +811,9 @@ impl ShellView {
                     "强制浅色",
                     Box::new(|m, cx| {
                         m.update_appearance(cx, |a| {
-                            a.mode = kanso_gpui::app::settings::ThemeMode::Light
+                            a.mode = kanso_gpui::app::settings::ThemeMode::Light;
+                            a.north_shore = cfg!(windows);
+                            a.light_theme = "bundled:windows-modern-light".into();
                         })
                     }),
                 ),
@@ -819,7 +821,8 @@ impl ShellView {
                     "强制深色",
                     Box::new(|m, cx| {
                         m.update_appearance(cx, |a| {
-                            a.mode = kanso_gpui::app::settings::ThemeMode::Dark
+                            a.mode = kanso_gpui::app::settings::ThemeMode::Dark;
+                            a.dark_theme = "bundled:windows-modern-dark".into();
                         })
                     }),
                 ),
@@ -827,7 +830,8 @@ impl ShellView {
                     "跟随系统",
                     Box::new(|m, cx| {
                         m.update_appearance(cx, |a| {
-                            a.mode = kanso_gpui::app::settings::ThemeMode::System
+                            a.mode = kanso_gpui::app::settings::ThemeMode::System;
+                            a.north_shore = false;
                         })
                     }),
                 ),
@@ -839,6 +843,7 @@ impl ShellView {
                 step(cx).await;
                 let _ = this.update_in(cx, |this, w, cx| {
                     use kanso_gpui::app::settings::ThemeMode;
+                    use kanso_gpui::widgets::style::color;
                     let settings = this.settings.read(cx);
                     let expected_dark = match settings.appearance().mode {
                         ThemeMode::Light => false,
@@ -847,8 +852,23 @@ impl ShellView {
                     };
                     let metrics = super::view::measure(w);
                     let expected_bg = settings.terminal_palette(expected_dark).background;
+                    let embedded_theme_ok = match settings.appearance().mode {
+                        ThemeMode::Light => expected_bg.to_u32() == 0xF8FAFC,
+                        ThemeMode::Dark => expected_bg.to_u32() == 0x12171D,
+                        ThemeMode::System => true,
+                    };
+                    let expected_sidebar = match (settings.appearance().north_shore, expected_dark)
+                    {
+                        (true, false) => 0xEAF0F4FF,
+                        (true, true) => 0x1C252EFF,
+                        (false, false) => 0xECECE8FF,
+                        (false, true) => 0x0B0B0BFF,
+                    };
                     let ok = this.settings_window.is_some()
                         && this.dark == expected_dark
+                        && embedded_theme_ok
+                        && color("bg.sidebar", display::window_appearance(w)).to_u32()
+                            == expected_sidebar
                         && this.active_terminal().is_some_and(|term| {
                             let term = term.read(cx);
                             term.palette.background == expected_bg

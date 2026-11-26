@@ -276,6 +276,11 @@ ui-display = 显示
 ui-appearance = 外观
 
 ui-theme = 模式
+ui-interface-theme = 界面配色
+ui-kanso-interface-theme = Kanso
+ui-windows-modern = Windows 现代
+ui-windows-modern-light = Windows 现代 · 浅色
+ui-windows-modern-dark = Windows 现代 · 深色
 
 ui-light-theme = 浅色终端配色
 

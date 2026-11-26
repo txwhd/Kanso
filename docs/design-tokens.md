@@ -26,6 +26,7 @@ cargo xtask gen-tokens [--out <dir>] [--themes-out <file>]   # 生成 Xcode 颜�
 
 - token 名：小写字母开头、用 `.` 分层，每层内用 camelCase，如 `bg.tabSelected`、`status.agentRunning`。
 - 每个 color token 必须同时有 `light`、`dark` 和非空 `note`。
+- Windows 现代界面配色可在 color token 上声明 `windowsNorthShore`（含 `light` 和 `dark`）。未声明时使用原有颜色，两套界面配色使用相同的对比度规则。
 - spacing / radius / font 的值必须是正数，单位 pt。
 - `contrast` 里的 `bg` 必须是不透明色（半透明背景没有确定的对比度，直接报错）；半透明的 `fg` 会先与 `bg` 合成再计算。
 - 对比度按 WCAG 2.x 相对亮度公式（sRGB 线性化）计算。文字要求 4.5:1（`text.tertiary` 例外为 3:1，只用于弱化信息），状态色是图形元素，按非文本对比度要求 3:1。
@@ -45,6 +46,8 @@ cargo xtask gen-tokens [--out <dir>] [--themes-out <file>]   # 生成 Xcode 颜�
 - `terminal.gutterText` 显示在终端背景上，所以它对 Kanso Light / Kanso Dark 的 background（分别对应 light / dark 外观）要求 4.5:1，这一项由 `check-tokens` 在终端配色检查里完成。
 
 ## 随程序附带的配色
+
+在 Windows 的「设置 → 通用 → 外观」中，可选择「Windows 现代」界面，以及配套的「Windows 现代 · 浅色」和「Windows 现代 · 深色」终端配色。
 
 `design/terminal-themes/bundled/` 下的配色由 kanso-core 编译进程序，和用户主题文件走同一套加载流程，两端都能在“浅色终端配色”“深色终端配色”中选到。它们不生成代码，也不是任何外观的默认配色；选项标识用 `bundled:` 前缀（例如 `bundled:classic-console`），所以用户目录里的同名文件不会覆盖它。对比度要求与上文相同，由 `check-tokens` 校验。新增时把文件放进该目录，并在 `crates/kanso-core/src/terminal_themes.rs` 的 `BUNDLED_THEMES` 里登记。
 

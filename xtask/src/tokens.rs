@@ -35,6 +35,7 @@ impl Appearance {
 struct ColorToken {
     light: Rgba,
     dark: Rgba,
+    windows_north_shore: Option<(Rgba, Rgba)>,
 }
 
 impl ColorToken {
@@ -42,6 +43,14 @@ impl ColorToken {
         match a {
             Appearance::Light => self.light,
             Appearance::Dark => self.dark,
+        }
+    }
+
+    fn windows_north_shore(&self, a: Appearance) -> Rgba {
+        match (self.windows_north_shore, a) {
+            (Some((light, _)), Appearance::Light) => light,
+            (Some((_, dark)), Appearance::Dark) => dark,
+            (None, _) => self.get(a),
         }
     }
 }
@@ -199,8 +208,30 @@ fn parse_tokens(file: &str, v: &Value, errors: &mut Vec<String>) -> Tokens {
                 {
                     errors.push(format!("{file}：color.{name} 缺少 note"));
                 }
+                let windows_north_shore = entry.get("windowsNorthShore").and_then(|colors| {
+                    let light = parse_color(
+                        file,
+                        &format!("color.{name}.windowsNorthShore.light"),
+                        colors.get("light"),
+                        errors,
+                    );
+                    let dark = parse_color(
+                        file,
+                        &format!("color.{name}.windowsNorthShore.dark"),
+                        colors.get("dark"),
+                        errors,
+                    );
+                    light.zip(dark)
+                });
                 if let (Some(light), Some(dark)) = (light, dark) {
-                    t.colors.insert(name.clone(), ColorToken { light, dark });
+                    t.colors.insert(
+                        name.clone(),
+                        ColorToken {
+                            light,
+                            dark,
+                            windows_north_shore,
+                        },
+                    );
                 }
             }
         }
@@ -346,24 +377,30 @@ fn check_tokens(
             continue;
         };
         for a in Appearance::ALL {
-            let (f, b) = (fg.get(a), bg.get(a));
-            if !b.is_opaque() {
-                errors.push(format!(
-                    "{file}：contrast 的 bg `{}`（{}）必须是不透明色",
-                    rule.bg,
-                    a.name()
-                ));
-                continue;
-            }
-            let ratio = contrast_ratio(f.over(b), b);
-            if ratio < rule.min {
-                errors.push(format!(
-                    "{file}：`{}` 对 `{}`（{}）对比度 {ratio:.2}，要求 >= {}",
-                    rule.fg,
-                    rule.bg,
-                    a.name(),
-                    rule.min
-                ));
+            let default = [(a.name(), fg.get(a), bg.get(a))];
+            let north_shore =
+                (fg.windows_north_shore.is_some() || bg.windows_north_shore.is_some()).then(|| {
+                    let name = match a {
+                        Appearance::Light => "Windows 现代浅色",
+                        Appearance::Dark => "Windows 现代深色",
+                    };
+                    (name, fg.windows_north_shore(a), bg.windows_north_shore(a))
+                });
+            for (name, f, b) in default.into_iter().chain(north_shore) {
+                if !b.is_opaque() {
+                    errors.push(format!(
+                        "{file}：contrast 的 bg `{}`（{name}）必须是不透明色",
+                        rule.bg
+                    ));
+                    continue;
+                }
+                let ratio = contrast_ratio(f.over(b), b);
+                if ratio < rule.min {
+                    errors.push(format!(
+                        "{file}：`{}` 对 `{}`（{name}）对比度 {ratio:.2}，要求 >= {}",
+                        rule.fg, rule.bg, rule.min
+                    ));
+                }
             }
         }
     }

@@ -478,6 +478,8 @@ pub const BUILTIN_THEMES: [(&str, &str); 2] =
 pub struct AppearanceSettings {
     /// 外观模式。
     pub mode: ThemeMode,
+    /// 是否启用 Windows 现代界面配色。
+    pub north_shore: bool,
     /// 浅色外观用的终端配色 id（未知 id 原样保留，使用处回落默认）。
     pub light_theme: String,
     /// 深色外观用的终端配色 id。
@@ -492,6 +494,7 @@ impl Default for AppearanceSettings {
     fn default() -> Self {
         AppearanceSettings {
             mode: ThemeMode::System,
+            north_shore: false,
             light_theme: "kanso-light".to_owned(),
             dark_theme: "kanso-dark".to_owned(),
             language: LanguageSetting::System,
@@ -507,6 +510,8 @@ impl AppearanceSettings {
         let d = AppearanceSettings::default();
         AppearanceSettings {
             mode: ThemeMode::from_storage(&get_str(&m, "mode", "")).unwrap_or(d.mode),
+            // 保留试用版的设置键，继续使用已保存的界面配色。
+            north_shore: get_bool(&m, "windowsNorthShore", d.north_shore),
             light_theme: get_str(&m, "lightTheme", &d.light_theme),
             dark_theme: get_str(&m, "darkTheme", &d.dark_theme),
             language: LanguageSetting::from_storage(&get_str(&m, "language", ""))
@@ -522,6 +527,7 @@ impl AppearanceSettings {
         json!({
             "v": VERSION,
             "mode": self.mode.storage(),
+            "windowsNorthShore": self.north_shore,
             "lightTheme": self.light_theme,
             "darkTheme": self.dark_theme,
             "language": self.language.storage(),
@@ -1218,6 +1224,7 @@ mod tests {
             r#"{"mode":"dark","lightTheme":"kanso-dark","darkTheme":"future-theme"}"#,
         ));
         assert_eq!(a.mode, ThemeMode::Dark);
+        assert!(!a.north_shore);
         assert_eq!(AppearanceSettings::decode(Some(&a.encode())), a);
         // 未知配色 id 保留，但取色时回落到该外观的默认。
         assert_eq!(a.dark_theme, "future-theme");
@@ -1235,6 +1242,7 @@ mod tests {
         );
         let en = AppearanceSettings {
             language: LanguageSetting::En,
+            north_shore: true,
             ..AppearanceSettings::default()
         };
         assert_eq!(AppearanceSettings::decode(Some(&en.encode())), en);

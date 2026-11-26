@@ -86,10 +86,20 @@ impl TerminalTheme {
 /// id 用 `bundled:` 前缀，与用户文件的 `file:` 分开：用户放一个同名文件不会顶掉它，
 /// 已保存的选择也不会因为用户删文件而失效。新增配色时在这里登记，并放进
 /// `design/terminal-themes/bundled/`（`check-tokens` 会校验该目录下每个文件的对比度）。
-const BUNDLED_THEMES: [(&str, &str); 1] = [(
-    "bundled:classic-console",
-    include_str!("../../../design/terminal-themes/bundled/classic-console.json"),
-)];
+const BUNDLED_THEMES: &[(&str, &str)] = &[
+    (
+        "bundled:classic-console",
+        include_str!("../../../design/terminal-themes/bundled/classic-console.json"),
+    ),
+    (
+        "bundled:windows-modern-light",
+        include_str!("../../../design/terminal-themes/bundled/windows-modern-light.json"),
+    ),
+    (
+        "bundled:windows-modern-dark",
+        include_str!("../../../design/terminal-themes/bundled/windows-modern-dark.json"),
+    ),
+];
 
 /// 随程序附带的配色，按登记顺序排列。
 fn bundled_terminal_themes() -> Vec<TerminalTheme> {
@@ -209,6 +219,10 @@ mod tests {
         assert_eq!(bundled.len(), BUNDLED_THEMES.len());
         assert_eq!(bundled[0].id, "bundled:classic-console");
         assert_eq!(bundled[0].name, "Classic Console");
+        assert_eq!(bundled[1].id, "bundled:windows-modern-light");
+        assert_eq!(bundled[1].background, 0xF8FAFC);
+        assert_eq!(bundled[2].id, "bundled:windows-modern-dark");
+        assert_eq!(bundled[2].background, 0x12171D);
         for (i, t) in bundled.iter().enumerate() {
             assert!(t.id.starts_with("bundled:"), "{}", t.id);
             assert!(!bundled[..i].iter().any(|o| o.id == t.id), "{}", t.id);

@@ -126,7 +126,14 @@ impl SettingsModel {
         BUILTIN_THEMES
             .iter()
             .map(|(id, name)| ((*id).to_owned(), (*name).to_owned()))
-            .chain(self.themes.iter().map(|t| (t.id.clone(), t.name.clone())))
+            .chain(self.themes.iter().map(|t| {
+                let name = match t.id.as_str() {
+                    "bundled:windows-modern-light" => label(Message::UiWindowsModernLight {}),
+                    "bundled:windows-modern-dark" => label(Message::UiWindowsModernDark {}),
+                    _ => t.name.as_str(),
+                };
+                (t.id.clone(), name.to_owned())
+            }))
             .collect()
     }
 
@@ -192,6 +199,7 @@ impl SettingsModel {
 
     /// 把当前设置写进 GPUI 一侧的生效状态（字体 / 字号 / 行距 / 强制外观）。
     pub(crate) fn push_to_display(&self, cx: &App) {
+        kanso_gpui::widgets::style::set_north_shore(cfg!(windows) && self.appearance().north_shore);
         display::apply(self.display(), self.appearance().mode, nerd_fallback(cx));
         display::apply_language(self.appearance().language);
     }
@@ -263,7 +271,7 @@ pub(crate) fn open_window(
 
 /// 设置窗口根视图。
 pub(crate) struct SettingsView {
-    titlebar_dark: Option<bool>,
+    titlebar_appearance: Option<(bool, bool)>,
     labels_language: Lang,
     page: usize,
     model: Entity<SettingsModel>,
@@ -558,7 +566,7 @@ impl SettingsView {
 
         let mcp = cx.new(|cx| mcp_page::McpPage::new(mcp, window, cx));
         let mut this = SettingsView {
-            titlebar_dark: None,
+            titlebar_appearance: None,
             labels_language: lang(),
             page: 0,
             model,
@@ -1008,16 +1016,16 @@ fn boxed(control: impl IntoElement, width: f32) -> AnyElement {
 
 impl Render for SettingsView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let dark = display::effective_dark(window);
-        if self.titlebar_dark != Some(dark) {
-            display::apply_titlebar(window);
-            self.titlebar_dark = Some(dark);
-        }
-        let th = Th(display::window_appearance(window));
         let (d, a) = {
             let m = self.model.read(cx);
             (m.display().clone(), m.appearance().clone())
         };
+        let titlebar_appearance = (display::effective_dark(window), a.north_shore);
+        if self.titlebar_appearance != Some(titlebar_appearance) {
+            display::apply_titlebar(window);
+            self.titlebar_appearance = Some(titlebar_appearance);
+        }
+        let th = Th(display::window_appearance(window));
 
         if self.labels_language != lang() {
             self.labels_language = lang();
@@ -1047,36 +1055,61 @@ impl Render for SettingsView {
         }
 
         // 外观
+        let mut appearance_rows = vec![
+            row(
+                &th,
+                &render_message(&Message::UiTheme {}),
+                self.mode.clone(),
+            ),
+            row(
+                &th,
+                &render_message(&Message::UiLightTheme {}),
+                boxed(self.light_theme.clone(), 220.0),
+            ),
+            row(
+                &th,
+                &render_message(&Message::UiDarkTheme {}),
+                boxed(self.dark_theme.clone(), 220.0),
+            ),
+            div()
+                .id("open-theme-folder")
+                .cursor_pointer()
+                .text_color(th.c("accent"))
+                .child(label(Message::UiOpenThemesFolder {}))
+                .on_click(cx.listener(|this, _, _, cx| {
+                    cx.open_with_system(&this.model.read(cx).themes_dir);
+                }))
+                .into_any_element(),
+        ];
+        if cfg!(windows) {
+            appearance_rows.insert(
+                1,
+                row(
+                    &th,
+                    label(Message::UiInterfaceTheme {}),
+                    segmented(
+                        &th,
+                        cx,
+                        "interface-theme",
+                        &[
+                            label(Message::UiKansoInterfaceTheme {}),
+                            label(Message::UiWindowsModern {}),
+                        ],
+                        usize::from(a.north_shore),
+                        |this, i, cx| {
+                            this.model.update(cx, |m, cx| {
+                                m.update_appearance(cx, |a| a.north_shore = i == 1)
+                            });
+                        },
+                    ),
+                ),
+            );
+        }
         let appearance_card = card(
             &th,
             &render_message(&Message::UiAppearance {}),
             "sun-moon",
-            vec![
-                row(
-                    &th,
-                    &render_message(&Message::UiTheme {}),
-                    self.mode.clone(),
-                ),
-                row(
-                    &th,
-                    &render_message(&Message::UiLightTheme {}),
-                    boxed(self.light_theme.clone(), 220.0),
-                ),
-                row(
-                    &th,
-                    &render_message(&Message::UiDarkTheme {}),
-                    boxed(self.dark_theme.clone(), 220.0),
-                ),
-                div()
-                    .id("open-theme-folder")
-                    .cursor_pointer()
-                    .text_color(th.c("accent"))
-                    .child(label(Message::UiOpenThemesFolder {}))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        cx.open_with_system(&this.model.read(cx).themes_dir);
-                    }))
-                    .into_any_element(),
-            ],
+            appearance_rows,
         );
 
         // 语言（ui-shell.md §10：Windows / Linux 在设置里切换）

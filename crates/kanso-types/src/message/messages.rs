@@ -198,6 +198,16 @@ messages! {
     UiAppearance = "ui-appearance" {},
     /// GPUI 设置页面：模式。
     UiTheme = "ui-theme" {},
+    /// Windows 界面配色选项。
+    UiInterfaceTheme = "ui-interface-theme" {},
+    /// Windows 原有的 Kanso 界面配色。
+    UiKansoInterfaceTheme = "ui-kanso-interface-theme" {},
+    /// Windows 现代界面配色。
+    UiWindowsModern = "ui-windows-modern" {},
+    /// Windows 现代浅色终端配色。
+    UiWindowsModernLight = "ui-windows-modern-light" {},
+    /// Windows 现代深色终端配色。
+    UiWindowsModernDark = "ui-windows-modern-dark" {},
     /// GPUI 设置页面：浅色终端配色。
     UiLightTheme = "ui-light-theme" {},
     /// GPUI 设置页面：深色终端配色。

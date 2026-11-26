@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "name": "Windows Modern Dark",
+  "foreground": "#E8EDF2",
+  "background": "#12171D",
+  "cursor": "#61C6E2",
+  "cursorText": "#12171D",
+  "selectionBackground": "#243B47",
+  "ansi": [
+    "#34434F",
+    "#F18495",
+    "#83D1A6",
+    "#E4B56B",
+    "#88B9FC",
+    "#C3A8EE",
+    "#61C6E2",
+    "#BBCAD4",
+    "#677E90",
+    "#FFA3AE",
+    "#A3E6BC",
+    "#F6CE8A",
+    "#B0D0FF",
+    "#D9C2FF",
+    "#91DDF0",
+    "#F3F7FB"
+  ],
+  "semantic": [
+    "#61C6E2",
+    "#83D1A6",
+    "#C3A8EE",
+    "#9BADBA",
+    "#C3A8EE",
+    "#88B9FC",
+    "#9BADBA",
+    "#E8EDF2",
+    "#9BADBA",
+    "#83D1A6",
+    "#F18495",
+    "#E4B56B",
+    "#E4B56B"
+  ]
+}

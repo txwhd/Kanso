@@ -5,10 +5,17 @@
 //! 圆角 `radius.md`、字号 `font.ui.body`。禁用态背景用 `bg.panel` / 边框用 `border.subtle`，不额外造色。
 
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde_json::Value;
 
 const TOKENS_JSON: &str = include_str!("../../../../design/tokens.json");
+static NORTH_SHORE: AtomicBool = AtomicBool::new(false);
+
+/// 应用当前的 Windows 界面配色设置。
+pub fn set_north_shore(enabled: bool) {
+    NORTH_SHORE.store(enabled, Ordering::Relaxed);
+}
 
 /// 外观。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
@@ -80,8 +87,14 @@ pub fn color(name: &str, appearance: Appearance) -> Rgba8 {
         Appearance::Light => "light",
         Appearance::Dark => "dark",
     };
-    tokens()["color"][name][key]
-        .as_str()
+    let token = &tokens()["color"][name];
+    let value = if NORTH_SHORE.load(Ordering::Relaxed) {
+        token["windowsNorthShore"][key].as_str()
+    } else {
+        None
+    };
+    value
+        .or_else(|| token[key].as_str())
         .and_then(Rgba8::from_hex)
         .unwrap_or_else(|| panic!("缺少颜色 token {name}.{key}"))
 }
