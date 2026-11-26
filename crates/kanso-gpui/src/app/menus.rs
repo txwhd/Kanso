@@ -37,7 +37,10 @@ pub fn encode(command: AppCommand) -> String {
         AppCommand::CloseGroup(scope, s) => {
             format!("close-group:{}:{}", scope_name(scope), s.raw())
         }
+        AppCommand::RenameTab(s) => format!("rename-tab:{}", s.raw()),
         AppCommand::EditSession(s) => format!("edit-session:{}", s.raw()),
+        AppCommand::ReconnectTab(s) => format!("reconnect-tab:{}", s.raw()),
+        AppCommand::CopyMcpTab(s) => format!("copy-mcp-tab:{}", s.raw()),
         AppCommand::ToggleRightClickMenu => "toggle-right-click-menu".into(),
         AppCommand::ToggleCopyOnSelect => "toggle-copy-on-select".into(),
         AppCommand::Quit => "quit".into(),
@@ -107,8 +110,17 @@ pub fn decode(id: &str) -> Option<AppCommand> {
     if let Some(rest) = id.strip_prefix("close-tab:") {
         return session(rest).map(AppCommand::CloseTab);
     }
+    if let Some(rest) = id.strip_prefix("rename-tab:") {
+        return session(rest).map(AppCommand::RenameTab);
+    }
     if let Some(rest) = id.strip_prefix("edit-session:") {
         return session(rest).map(AppCommand::EditSession);
+    }
+    if let Some(rest) = id.strip_prefix("reconnect-tab:") {
+        return session(rest).map(AppCommand::ReconnectTab);
+    }
+    if let Some(rest) = id.strip_prefix("copy-mcp-tab:") {
+        return session(rest).map(AppCommand::CopyMcpTab);
     }
     if let Some(rest) = id.strip_prefix("close-group:") {
         let (scope, sid) = rest.split_once(':')?;
@@ -226,6 +238,10 @@ pub struct TabMenuContext {
     pub session: SessionId,
     /// 标签来自已保存的会话（才显示“编辑会话”）。
     pub from_profile: bool,
+    /// 标签已断开（才显示“重新连接”；且需要来自已保存会话）。
+    pub disconnected: bool,
+    /// MCP 服务正在运行且标签所属会话已授权。
+    pub mcp_addressable: bool,
     /// 同组里是否有可关闭的“其他”标签。
     pub has_others: bool,
     /// 同组里它上方（菜单叫左侧）是否有标签。
@@ -234,7 +250,7 @@ pub struct TabMenuContext {
     pub has_below: bool,
 }
 
-/// 标签右键菜单（ui-shell.md §2.4）：编辑已保存的会话（仅来自已保存会话的标签）、关闭、
+/// 标签右键菜单（ui-shell.md §2.4）：重命名、编辑已保存的会话（仅来自已保存会话的标签）、关闭、
 /// 关闭其他 / 左侧 / 右侧 / 全部（只在同一分屏组内生效，没有可关闭的标签时禁用）。
 pub fn tab_menu(ctx: TabMenuContext) -> Vec<MenuItem> {
     let s = ctx.session;
@@ -242,14 +258,29 @@ pub fn tab_menu(ctx: TabMenuContext) -> Vec<MenuItem> {
         let it = MenuItem::action(encode(AppCommand::CloseGroup(scope, s)), label);
         if enabled { it } else { it.disabled() }
     };
-    let mut items = Vec::new();
+    let mut items = vec![MenuItem::action(
+        encode(AppCommand::RenameTab(s)),
+        label(Message::UiRename {}),
+    )];
     if ctx.from_profile {
         items.push(MenuItem::action(
             encode(AppCommand::EditSession(s)),
             label(Message::UiEditSession2 {}),
         ));
-        items.push(MenuItem::separator());
     }
+    if ctx.disconnected && ctx.from_profile {
+        items.push(MenuItem::action(
+            encode(AppCommand::ReconnectTab(s)),
+            label(Message::UiReconnect {}),
+        ));
+    }
+    if ctx.mcp_addressable {
+        items.push(MenuItem::action(
+            encode(AppCommand::CopyMcpTab(s)),
+            label(Message::WinMcpCopyTab {}),
+        ));
+    }
+    items.push(MenuItem::separator());
     items.push(MenuItem::action(
         encode(AppCommand::CloseTab(s)),
         label(Message::UiClose {}),
@@ -528,6 +559,7 @@ mod tests {
             AppCommand::CloseGroup(CloseScope::Above, sid(8)),
             AppCommand::CloseGroup(CloseScope::Below, sid(9)),
             AppCommand::CloseGroup(CloseScope::All, sid(10)),
+            AppCommand::RenameTab(sid(4)),
             AppCommand::EditSession(sid(3)),
             AppCommand::ToggleRightClickMenu,
             AppCommand::ToggleCopyOnSelect,
@@ -576,6 +608,8 @@ mod tests {
         let ctx = TabMenuContext {
             session: sid(1),
             from_profile: true,
+            disconnected: true,
+            mcp_addressable: true,
             has_others: true,
             has_above: true,
             has_below: true,
@@ -649,14 +683,18 @@ mod tests {
         let base = TabMenuContext {
             session: sid(5),
             from_profile: false,
+            disconnected: false,
+            mcp_addressable: false,
             has_others: false,
             has_above: false,
             has_below: false,
         };
         let a = all(&tab_menu(base));
-        // 没有已保存会话：不出现“编辑”。
+        // 没有已保存会话：不出现“编辑”，但始终有“重命名”。
         assert!(!a.iter().any(|x| x.0.starts_with("edit-session")));
+        assert!(!a.iter().any(|x| x.0.starts_with("copy-mcp-tab")));
         let enabled = |id: &str| a.iter().find(|x| x.0 == id).map(|x| x.1);
+        assert_eq!(enabled("rename-tab:5"), Some(true));
         assert_eq!(enabled("close-tab:5"), Some(true));
         // 没有可关闭的标签时禁用，全部关闭始终可用（至少关自己）。
         assert_eq!(enabled("close-group:others:5"), Some(false));
@@ -666,11 +704,21 @@ mod tests {
 
         let b = all(&tab_menu(TabMenuContext {
             from_profile: true,
+            mcp_addressable: true,
             has_others: true,
             has_below: true,
             ..base
         }));
         assert!(b.iter().any(|x| x.0 == "edit-session:5"));
+        assert!(b.iter().any(|x| x.0 == "copy-mcp-tab:5"));
+        // “重新连接”只在已断开的已保存会话标签上出现。
+        assert!(!b.iter().any(|x| x.0 == "reconnect-tab:5"));
+        let c = all(&tab_menu(TabMenuContext {
+            from_profile: true,
+            disconnected: true,
+            ..base
+        }));
+        assert!(c.iter().any(|x| x.0 == "reconnect-tab:5"));
         let enabled = |id: &str| b.iter().find(|x| x.0 == id).map(|x| x.1);
         assert_eq!(enabled("close-group:others:5"), Some(true));
         assert_eq!(enabled("close-group:above:5"), Some(false));

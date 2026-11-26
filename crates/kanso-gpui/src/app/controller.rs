@@ -302,6 +302,33 @@ impl<B: AppBackend + Clone> AppController<B> {
         Ok(id)
     }
 
+    /// 用已断开标签的原已保存会话建立一条全新会话，并排到旧标签的原位置。
+    /// core 的会话 id 是一次性的，无法复活旧会话，所以这里必然是新 id。
+    /// 返回新会话 id；原标签不是已保存会话或没有已保存配置时返回 None，不新建。
+    /// 旧标签由调用方用完整的关闭流程收尾（清终端、文件面板与 MCP 引用）。
+    pub fn reconnect_session(
+        &mut self,
+        old: SessionId,
+        size: GridSize,
+    ) -> CoreResult<Option<SessionId>> {
+        let Some(item) = self.workspace.item(old).cloned() else {
+            return Ok(None);
+        };
+        if !matches!(item.connection, TabConnection::Closed(_)) {
+            return Ok(None);
+        }
+        let Some(profile) = item.profile else {
+            return Ok(None);
+        };
+        let pane = self.workspace.pane_of(old);
+        let index = pane
+            .and_then(|p| self.workspace.tabs_in(p).iter().position(|i| i.id == old))
+            .unwrap_or(0);
+        let new = self.open_profile(profile, pane, size)?;
+        self.workspace.move_tab(new, index);
+        Ok(Some(new))
+    }
+
     /// 复制活动标签（SSH 复用已认证的连接）；没有活动标签时退化为新本地 shell。
     pub fn duplicate_active_tab(&mut self, size: GridSize) -> CoreResult<SessionId> {
         let Some(active) = self.workspace.active_session() else {
@@ -352,6 +379,7 @@ impl<B: AppBackend + Clone> AppController<B> {
             info.as_ref().map_or("", |i| i.name.as_str()),
         );
         if let Some(info) = &info {
+            item.custom_title = info.custom_title.clone();
             item.connection = TabConnection::from(&info.state);
             item.profile = info.profile;
             item.color = info
@@ -372,6 +400,17 @@ impl<B: AppBackend + Clone> AppController<B> {
     /// 接管 MCP 已打开的标签，保持前台会话与输入焦点。
     pub fn adopt_mcp_session(&mut self, id: SessionId) -> bool {
         self.adopt(id, None, None, false)
+    }
+
+    /// 设置或清除标签的自定义名，并同步通知核心（MCP 等处看到同一标题）。
+    pub fn rename_session(&mut self, session: SessionId, title: Option<String>) -> bool {
+        let normalized = title
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned);
+        self.backend.set_session_title(session, normalized.clone());
+        self.workspace.set_custom_title(session, normalized)
     }
 
     // ---- 关闭 ----
@@ -522,6 +561,7 @@ mod tests {
                     profile,
                     kind,
                     name,
+                    custom_title: None,
                     state: SessionState::Connecting,
                 },
             );
@@ -536,6 +576,12 @@ mod tests {
 
         fn session_info(&self, session: SessionId) -> Option<SessionInfo> {
             self.0.borrow().sessions.get(&session).cloned()
+        }
+
+        fn set_session_title(&self, session: SessionId, title: Option<String>) {
+            if let Some(info) = self.0.borrow_mut().sessions.get_mut(&session) {
+                info.custom_title = title;
+            }
         }
 
         fn set_visible(&self, session: SessionId, visible: bool) {
@@ -655,6 +701,54 @@ mod tests {
         assert_eq!(item.color, Some(Rgb { r: 1, g: 2, b: 3 }));
         assert!(c.open_profile(ProfileId::new(), None, GRID).is_err());
         assert_eq!(c.workspace().tab_count(), 1);
+    }
+
+    #[test]
+    fn reconnect_uses_profile_replaces_old_tab_and_keeps_position() {
+        let (mut c, fake) = controller();
+        let p = crate::app::testutil::ssh_profile("prod", "10.0.0.1", "root");
+        let pid = p.id;
+        fake.0.borrow_mut().profiles.push(p);
+        // 两个标签，断开的是第一个：重连后新标签应留在第一位。
+        let first = c.open_profile(pid, None, GRID).unwrap();
+        let second = c.open_local_shell(None, GRID).unwrap();
+        c.handle_event(state(
+            first.raw(),
+            SessionState::Closed(CloseReason::Exited { code: Some(1) }),
+        ));
+        assert!(matches!(
+            c.workspace().item(first).unwrap().connection,
+            TabConnection::Closed(_)
+        ));
+
+        let new = c.reconnect_session(first, GRID).unwrap().unwrap();
+        assert_ne!(new, first, "core 的会话 id 一次性，重连必须是新会话");
+        assert_eq!(c.workspace().item(new).unwrap().profile, Some(pid));
+        assert_eq!(
+            c.workspace().sidebar_order(),
+            vec![new, first, second],
+            "新标签排到旧标签原位置；旧标签由 UI 层清理"
+        );
+        assert_eq!(
+            fake.0.borrow().opened.last(),
+            Some(&OpenTarget::Profile(pid)),
+            "用原 profile 全新建连，不复用旧会话"
+        );
+    }
+
+    #[test]
+    fn reconnect_ignores_connected_and_profileless_tabs() {
+        let (mut c, _fake) = controller();
+        let local = c.open_local_shell(None, GRID).unwrap();
+        // 仍连接的标签不重连。
+        assert_eq!(c.reconnect_session(local, GRID).unwrap(), None);
+        // 断开但没有 profile 的临时本地 shell 也不重连。
+        c.handle_event(state(
+            local.raw(),
+            SessionState::Closed(CloseReason::Exited { code: Some(1) }),
+        ));
+        assert_eq!(c.reconnect_session(local, GRID).unwrap(), None);
+        assert!(c.workspace().item(local).is_some());
     }
 
     #[test]

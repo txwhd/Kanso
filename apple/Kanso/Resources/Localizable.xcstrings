@@ -865,6 +865,12 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无法启动终端" } }
       }
     },
+    "Disconnected" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnected" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已断开" } }
+      }
+    },
     "Session ended" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Session ended" } },
@@ -1525,6 +1531,12 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重命名…" } }
       }
     },
+    "Reconnect" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reconnect" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重新连接" } }
+      }
+    },
     "New Group" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "New Group" } },
@@ -1541,6 +1553,18 @@
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Rename Group" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重命名分组" } }
+      }
+    },
+    "Rename Tab" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rename Tab" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重命名标签" } }
+      }
+    },
+    "Leave blank to restore the default title." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Leave blank to restore the default title." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "留空以恢复默认标题。" } }
       }
     },
     "Rename" : {
@@ -3340,6 +3364,36 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "没有审计记录。" } }
       }
     },
+    "Command: %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Command: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "命令：%@" } }
+      }
+    },
+    "Terminal input: %@" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Terminal input: %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "终端输入：%@" } }
+      }
+    },
+    "Sent" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sent" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已发出" } }
+      }
+    },
+    "Rejected before sending" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Rejected before sending" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "拒绝，未发出" } }
+      }
+    },
+    "Sending unconfirmed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sending unconfirmed" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "发送状态未确认" } }
+      }
+    },
     "Opened by MCP" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Opened by MCP" } },
@@ -3368,6 +3422,60 @@
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "MCP access" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "MCP 访问" } }
+      }
+    },
+    "Protocol Keepalive" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Protocol Keepalive" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "协议层保活" } }
+      }
+    },
+    "Idle Keepalive" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Idle Keepalive" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "空闲保活" } }
+      }
+    },
+    "Interval (s)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Interval (s)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "间隔（秒）" } }
+      }
+    },
+    "Misses" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Misses" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无回应次数" } }
+      }
+    },
+    "Idle Interval (s)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Idle Interval (s)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "空闲间隔（秒）" } }
+      }
+    },
+    "Idle String" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Idle String" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "空闲时发送的字符串" } }
+      }
+    },
+    "Keepalive intervals must be numbers from 1 to 86400." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Keepalive intervals must be numbers from 1 to 86400." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保活间隔必须是 1 到 86400 之间的数字。" } }
+      }
+    },
+    "Sessions" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sessions" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "会话" } }
+      }
+    },
+    "Tabs" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tabs" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "标签" } }
       }
     }
   },

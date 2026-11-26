@@ -254,6 +254,22 @@ final class WorkspaceController {
         return sessionID
     }
 
+    /// 重新连接已断开的标签：用它的已保存会话配置建立一条全新会话，留在原位置并替换旧标签。
+    /// core 的会话 id 是一次性的，无法复活旧会话，所以这里必然是新的 SessionID。
+    /// 只有来自已保存会话的标签才有可复用的配置；临时本地 shell 不提供重连。
+    @discardableResult
+    func reconnectSession(_ old: SessionID) throws -> SessionID? {
+        guard let item = workspace.item(old),
+              case .closed = item.connection,
+              let profileID = item.profileID,
+              let pane = workspace.pane(of: old) else { return nil }
+        let index = workspace.tabs(in: pane).firstIndex { $0.id == old } ?? 0
+        let new = try openProfile(profileID, in: pane)
+        workspace.moveTab(new, toIndex: index)
+        closeNow(old)
+        return new
+    }
+
     /// 复制活动标签；没有活动标签时退化为新本地 shell。
     @discardableResult
     func duplicateActiveTab() throws -> SessionID {
@@ -294,6 +310,7 @@ final class WorkspaceController {
             id: id,
             kind: info.map { CoreEventMapping.tabKind(for: $0.kind) } ?? .local,
             name: info?.name ?? "",
+            customTitle: info?.customTitle,
             profileID: info?.profile,
             connection: info.map { CoreEventMapping.connection(for: $0.state) } ?? .connecting
         )
@@ -423,6 +440,16 @@ final class WorkspaceController {
     }
 
     // MARK: - 其他动作
+
+    /// 设置或清除标签的自定义名（同步通知 core，让 MCP 等处看到同一标题）。
+    func renameSession(_ id: SessionID, to title: String?) {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = (trimmed?.isEmpty == false) ? trimmed : nil
+        core.setSessionTitle(sessionId: id, title: normalized)
+        if workspace.setCustomTitle(id, normalized) {
+            refresh()
+        }
+    }
 
     /// 清除活动会话的缓冲区。会话已关闭等错误无事可做，忽略。
     func clearActiveBuffer() {

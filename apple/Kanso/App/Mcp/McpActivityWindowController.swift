@@ -342,15 +342,35 @@ final class McpActivityViewController: NSViewController, NSTextFieldDelegate {
             var parts = McpText.auditHeadParts(record)
             if let session { parts.append(session) }
             if let error = record.errorCode { parts.append(error) }
+            if let tab = record.sessionId, record.tool == "kanso_terminal_run" || record.tool == "kanso_terminal_send" {
+                parts.append("tab=\(tab)")
+            }
+            switch record.dispatch {
+            case .some(.submitted):
+                parts.append(String(localized: "Sent"))
+            case .some(.rejected):
+                parts.append(String(localized: "Rejected before sending"))
+            case .some(.unconfirmed):
+                parts.append(String(localized: "Sending unconfirmed"))
+            case .none:
+                break
+            }
             let head = Self.wrappingLabel(parts.joined(separator: " · "), color: DesignTokens.Color.textSecondary)
             var lines: [NSView] = [head]
-            if !record.args.isEmpty {
-                // 参数摘要可能很长（整条命令），界面只放截断后的一行，悬停看全文。
-                let args = NSTextField(labelWithString: McpText.argsSummary(record.args))
+            var summaries: [String] = []
+            if let input = record.input {
+                summaries.append(record.tool == "kanso_terminal_send"
+                    ? String(localized: "Terminal input: \(input)")
+                    : String(localized: "Command: \(input)"))
+            }
+            if !record.args.isEmpty { summaries.append(record.args) }
+            for summary in summaries {
+                // 长命令和参数各显示一行，悬停看全文。
+                let args = NSTextField(labelWithString: McpText.argsSummary(summary))
                 args.font = .monospacedSystemFont(ofSize: DesignTokens.Font.uiCaption, weight: .regular)
                 args.textColor = .token(DesignTokens.Color.textTertiary)
                 args.lineBreakMode = .byTruncatingTail
-                args.toolTip = record.args
+                args.toolTip = summary
                 args.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
                 lines.append(args)
             }
@@ -415,21 +435,32 @@ final class McpActivityWindowController: NSWindowController {
     init(mcp: McpCoordinator, autosaveName: String? = "KansoMcpActivityWindow") {
         self.mcp = mcp
         content = McpActivityViewController(core: mcp.core)
+        let defaultSize = NSSize(width: 640, height: 520)
+        let minSize = NSSize(width: 480, height: 340)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 640, height: 520),
+            contentRect: NSRect(origin: .zero, size: defaultSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false
         )
         window.title = String(localized: "MCP Activity")
         window.contentViewController = content
-        window.minSize = NSSize(width: 480, height: 340)
+        window.minSize = minSize
+        // 赋 contentViewController 会把窗口缩到根视图初始约束的最小宽度，这里恢复默认尺寸。
+        window.setContentSize(defaultSize)
         // 关闭后窗口留在持有者手里，下次 `present()` 直接再显示。
         window.isReleasedWhenClosed = false
         super.init(window: window)
 
         if let autosaveName {
-            // 没有已保存的位置时居中；setFrameAutosaveName 必须在这之后调用，否则会把居中前的位置存下来。
-            if !window.setFrameUsingName(autosaveName) { window.center() }
+            // 没有已保存的位置，或旧版本存下了低于最小尺寸的窄框时，恢复默认尺寸并居中；
+            // setFrameAutosaveName 必须在这之后调用，否则会把居中前的位置存下来。
+            if !window.setFrameUsingName(autosaveName)
+                || window.frame.width < minSize.width
+                || window.frame.height < minSize.height
+            {
+                window.setContentSize(defaultSize)
+                window.center()
+            }
             window.setFrameAutosaveName(autosaveName)
         } else {
             window.center()

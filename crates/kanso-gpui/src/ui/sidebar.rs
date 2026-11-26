@@ -7,7 +7,6 @@
 
 use gpui::{Context, Hsla, MouseButton, MouseDownEvent, div, prelude::*, px, rgb};
 use kanso_gpui::app::i18n::t;
-use kanso_gpui::app::shortcuts::AppCommand;
 use kanso_gpui::app::status_bar::state_text;
 use kanso_gpui::app::tab::{
     TabConnection, TabDescriptions, TabItem, TabKind, TabPresentation, truncate_keep_tail,
@@ -25,6 +24,13 @@ const SESSION_COLORS: [u32; 8] = [
 
 /// 平均一个字符约占的像素宽（13px 界面字体，中英混排的经验值），用来估算主标题能放几个字符。
 pub(super) const CELL_PX: f32 = 7.4;
+
+/// 左侧栏当前显示的页面：已打开的实时标签，或已保存的会话管理。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum SidebarPage {
+    Tabs,
+    Sessions,
+}
 
 fn session_color(item: &TabItem) -> Hsla {
     let rgb_hex = match item.color {
@@ -53,6 +59,144 @@ impl ShellView {
         let show_headers = ws.shows_section_headers();
         let active_pane = ws.active_pane();
         let active_session = ws.active_session();
+        let tab_count: usize = sections.iter().map(|s| s.tabs.len()).sum();
+        let has_unread = sections
+            .iter()
+            .flat_map(|s| s.tabs.iter())
+            .any(|item| item.unread_done);
+        let on_tabs = self.sidebar_page == SidebarPage::Tabs;
+        let radius_sm = number("radius", "sm");
+
+        // 顶部「标签 / 会话」双段切换栏：4px 外圆角 / 3px 选中块，与 macOS 侧保持一致。
+        let mode_switch = div().px(px(8.0)).pt(px(8.0)).flex_none().child(
+            div()
+                .h(px(26.0))
+                .p(px(2.0))
+                .rounded(px(radius_sm))
+                .bg(th.c("bg.field"))
+                .border_1()
+                .border_color(th.c("border.field"))
+                .flex()
+                .items_center()
+                .child(
+                    div()
+                        .id("sidebar-tab-tabs")
+                        .flex_1()
+                        .h_full()
+                        .rounded(px((radius_sm - 1.0).max(2.0)))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .gap(px(4.0))
+                        .cursor_pointer()
+                        .text_size(px(number("font", "ui.caption")))
+                        .text_color(if on_tabs {
+                            th.c("text.primary")
+                        } else {
+                            th.c("text.secondary")
+                        })
+                        .when(on_tabs, |d| {
+                            d.bg(th.c("bg.tabSelected"))
+                                .border_1()
+                                .border_color(th.c("border.subtle"))
+                        })
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _: &MouseDownEvent, window, cx| {
+                                cx.stop_propagation();
+                                if this.sidebar_page != SidebarPage::Tabs {
+                                    this.show_sidebar_tabs(window, cx);
+                                }
+                            }),
+                        )
+                        .child(t(&Message::UiSidebarTabs {}))
+                        .when(tab_count > 0, |d| {
+                            d.child(
+                                div()
+                                    .text_size(px(10.0))
+                                    .text_color(th.c("text.tertiary"))
+                                    .child(tab_count.to_string()),
+                            )
+                        })
+                        .when(!on_tabs && has_unread, |d| {
+                            d.child(
+                                div()
+                                    .w(px(6.0))
+                                    .h(px(6.0))
+                                    .rounded(px(3.0))
+                                    .bg(th.c("status.unreadDone")),
+                            )
+                        }),
+                )
+                .child(
+                    div()
+                        .id("sidebar-tab-sessions")
+                        .flex_1()
+                        .h_full()
+                        .rounded(px((radius_sm - 1.0).max(2.0)))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .text_size(px(number("font", "ui.caption")))
+                        .text_color(if !on_tabs {
+                            th.c("text.primary")
+                        } else {
+                            th.c("text.secondary")
+                        })
+                        .when(!on_tabs, |d| {
+                            d.bg(th.c("bg.tabSelected"))
+                                .border_1()
+                                .border_color(th.c("border.subtle"))
+                        })
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _: &MouseDownEvent, window, cx| {
+                                cx.stop_propagation();
+                                if this.sidebar_page != SidebarPage::Sessions {
+                                    this.show_sidebar_sessions(false, window, cx);
+                                }
+                            }),
+                        )
+                        .child(t(&Message::UiSidebarSessions {})),
+                ),
+        );
+
+        let resize_handle = div()
+            .id("sidebar-resize")
+            .absolute()
+            .right_0()
+            .top_0()
+            .bottom_0()
+            .w(px(5.))
+            .cursor(gpui::CursorStyle::ResizeLeftRight)
+            .occlude()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                    this.sidebar_resizing = true;
+                    cx.stop_propagation();
+                }),
+            );
+
+        if !on_tabs {
+            return div()
+                .absolute()
+                .left_0()
+                .top(px(super::toolbar::HEIGHT))
+                .bottom_0()
+                .w(px(width))
+                .flex()
+                .flex_col()
+                .bg(th.c("bg.sidebar"))
+                .border_r_1()
+                .border_color(th.c("border.subtle"))
+                .child(mode_switch)
+                .children(self.sidebar_sessions.clone())
+                .child(resize_handle)
+                .into_any_element();
+        }
+
         let title_cells = (((width - 12.0 - 20.0 - 28.0 - 24.0 - 16.0) / CELL_PX) as usize).max(8);
 
         let mut list = div()
@@ -61,9 +205,8 @@ impl ShellView {
             .overflow_y_scroll()
             .flex()
             .flex_col()
-            .gap(px(number("spacing", "tabRow.gap")))
-            .px(px(number("spacing", "tabRow.paddingX")))
-            .py(px(8.0))
+            .border_t_1()
+            .border_color(th.c("border.subtle"))
             .on_scroll_wheel(cx.listener(|this, _, _, cx| this.cancel_tab_reorder(cx)))
             .on_mouse_down(
                 MouseButton::Left,
@@ -72,13 +215,6 @@ impl ShellView {
                     if ev.click_count == 2 {
                         this.duplicate_active_tab_clicked(window, cx);
                     }
-                }),
-            )
-            // 标签栏空白处右键：打开会话启动器（标签行的右键会先拦下，不会走到这里）。
-            .on_mouse_down(
-                MouseButton::Right,
-                cx.listener(|this, _: &MouseDownEvent, window, cx| {
-                    this.run_command(AppCommand::OpenLauncher, window, cx)
                 }),
             );
 
@@ -104,7 +240,7 @@ impl ShellView {
                 list = list.child(
                     div()
                         .id(("section", pane.0 as usize))
-                        .px(px(8.0))
+                        .px(px(number("spacing", "tabRow.paddingX") + 8.0))
                         .pt(px(8.0))
                         .pb(px(2.0))
                         .text_size(px(number("font", "ui.caption")))
@@ -136,19 +272,29 @@ impl ShellView {
                 let selected = active_session == Some(item.id);
                 // 选中且在活动分屏：完整高亮；选中但分屏不活动：淡一点，表示“该分屏当前显示它”。
                 let in_active_pane = pane == active_pane;
-                let title =
-                    truncate_keep_tail(&TabPresentation::primary_title(item, home), title_cells);
-                list = list.child(self.render_row(
-                    item,
-                    index,
-                    title,
-                    selected,
-                    in_active_pane,
-                    ws.active_tab_in(pane) == Some(item.id),
-                    None,
-                    th,
-                    cx,
-                ));
+                let title = if item.custom_title.is_some() {
+                    TabPresentation::primary_title(item, home)
+                } else {
+                    truncate_keep_tail(&TabPresentation::primary_title(item, home), title_cells)
+                };
+                list = list.child(
+                    div()
+                        .px(px(number("spacing", "tabRow.paddingX")))
+                        .py(px(number("spacing", "tabRow.gap") / 2.0))
+                        .border_b_1()
+                        .border_color(th.c("border.subtle"))
+                        .child(self.render_row(
+                            item,
+                            index,
+                            title,
+                            selected,
+                            in_active_pane,
+                            ws.active_tab_in(pane) == Some(item.id),
+                            None,
+                            th,
+                            cx,
+                        )),
+                );
             }
         }
 
@@ -170,6 +316,7 @@ impl ShellView {
             .bg(th.c("bg.sidebar"))
             .border_r_1()
             .border_color(th.c("border.subtle"))
+            .child(mode_switch)
             // 顶部工具条：路径筛选 + 新建按钮。
             .child(
                 div()
@@ -213,24 +360,7 @@ impl ShellView {
                     ),
             )
             .child(list)
-            .child(
-                div()
-                    .id("sidebar-resize")
-                    .absolute()
-                    .right_0()
-                    .top_0()
-                    .bottom_0()
-                    .w(px(5.))
-                    .cursor(gpui::CursorStyle::ResizeLeftRight)
-                    .occlude()
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, _: &MouseDownEvent, _, cx| {
-                            this.sidebar_resizing = true;
-                            cx.stop_propagation();
-                        }),
-                    ),
-            )
+            .child(resize_handle)
             .into_any_element()
     }
 
@@ -252,18 +382,17 @@ impl ShellView {
         cx: &mut Context<Self>,
     ) -> gpui::AnyElement {
         let sid = item.id;
-        let accent = session_color(item);
+        let closed = matches!(item.connection, TabConnection::Closed(_));
+        let accent = if closed {
+            th.c("border.strong")
+        } else {
+            session_color(item)
+        };
         let subtitle = TabDescriptions::state_line(item)
             .as_ref()
             .map(state_text)
-            .or_else(|| TabPresentation::subtitle(item).map(str::to_owned));
-        let chip_tooltip = chip.map(|_| {
-            let mut lines = vec![title.clone()];
-            lines.extend(subtitle.clone());
-            lines
-        });
-        let subtitle = if chip.is_some() { None } else { subtitle };
-        let closed = matches!(item.connection, TabConnection::Closed(_));
+            .or_else(|| closed.then(|| t(&Message::UiSessionDisconnected {})))
+            .or_else(|| TabPresentation::subtitle(item, self.ctl.home_dir()));
         let busy = item.activity.is_busy();
         let mcp_mark = self.mcp.read(cx).tab_mark(sid).map(|(active, lines)| {
             let color = th.c(if active { "accent" } else { "text.tertiary" });
@@ -284,11 +413,8 @@ impl ShellView {
         } else {
             (None, false)
         };
-        let title_color = if closed {
-            th.c("text.tertiary")
-        } else {
-            th.c("text.primary")
-        };
+        // 标题始终用主文字色保持清晰，断开状态由左侧暗灰条与副标题表达。
+        let title_color = th.c("text.primary");
         let sub_color = match &item.connection {
             TabConnection::Closed(Some(_)) => th.c("status.warning"),
             _ if item.unread_done => th.c("status.unreadDone"),
@@ -296,6 +422,25 @@ impl ShellView {
             _ => th.c("text.secondary"),
         };
         let (_, has_digit) = TabPresentation::shortcut_digit(index);
+        let mcp_addressable = item
+            .profile
+            .is_some_and(|profile| self.mcp.read(cx).can_address_tab(profile));
+        let row_tooltip = (chip.is_some() || mcp_addressable || has_digit).then(|| {
+            let mut lines = vec![title.clone()];
+            if chip.is_some() {
+                lines.extend(subtitle.clone());
+            }
+            if mcp_addressable {
+                lines.push(t(&Message::WinMcpTabId {
+                    id: format!("tab={}", sid.raw()),
+                }));
+            }
+            if has_digit {
+                lines.push(format!("Alt+{}", index + 1));
+            }
+            lines
+        });
+        let subtitle = if chip.is_some() { None } else { subtitle };
 
         let rect = std::rc::Rc::new(std::cell::Cell::new(gpui::Bounds::<gpui::Pixels>::default()));
         let measured = rect.clone();
@@ -328,7 +473,7 @@ impl ShellView {
                 number("spacing", "tabRow.height")
             }))
             .when_some(chip, |row, w| row.w(px(w)))
-            .when_some(chip_tooltip, |row, lines| {
+            .when_some(row_tooltip, |row, lines| {
                 row.tooltip(move |_, cx| {
                     let lines = lines.clone();
                     cx.new(|_| super::status_bar::LinesTooltip { lines, th })
@@ -348,6 +493,10 @@ impl ShellView {
                 cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
                     cx.stop_propagation();
                     this.cancel_tab_reorder(cx);
+                    if ev.click_count == 2 {
+                        this.open_rename_tab_dialog(sid, window, cx);
+                        return;
+                    }
                     this.activate_session(sid, window, cx);
                     // 竖栏筛选中只显示子集，插入位置对不上完整列表，不允许排序；标签条没有筛选。
                     if (chip.is_some() || this.path_filter.read(cx).text().trim().is_empty())
@@ -473,7 +622,7 @@ impl ShellView {
         }))
         // 未读完成 / 运行中指示点。
         .children(mcp_mark)
-        .children((item.unread_done || busy).then(|| {
+        .children((!closed && (item.unread_done || busy)).then(|| {
             div()
                 .flex_none()
                 .w(px(6.0))

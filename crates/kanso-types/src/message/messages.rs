@@ -260,6 +260,10 @@ messages! {
     UiPaletteTabs = "ui-palette-tabs" {},
     /// 命令面板的已保存会话。
     UiPaletteSessions = "ui-palette-sessions" {},
+    /// 左侧栏顶部切换：标签页。
+    UiSidebarTabs = "ui-sidebar-tabs" {},
+    /// 左侧栏顶部切换：会话管理页。
+    UiSidebarSessions = "ui-sidebar-sessions" {},
     /// 命令面板的命令分组。
     UiPaletteCommands = "ui-palette-commands" {},
     /// 命令面板搜索范围。
@@ -478,6 +482,8 @@ messages! {
     UiQuit = "ui-quit" {},
     /// GPUI 界面文字：编辑会话…
     UiEditSession2 = "ui-edit-session-2" {},
+    /// GPUI 界面文字：重新连接
+    UiReconnect = "ui-reconnect" {},
     /// GPUI 界面文字：关闭
     UiClose = "ui-close" {},
     /// GPUI 界面文字：关闭其他
@@ -538,6 +544,22 @@ messages! {
     UiEnterSessionName = "ui-enter-session-name" {},
     /// GPUI 界面文字：端口必须是 1 到 65535 之间的数字。
     UiPortMustBeNumberFrom = "ui-port-must-be-number-from" {},
+    /// GPUI 界面文字：保活间隔必须是 1 到 86400 之间的数字。
+    UiKeepaliveIntervalInvalid = "ui-keepalive-interval-invalid" {},
+    /// GPUI 界面文字：启用协议层 keepalive。
+    UiKeepaliveEnabled = "ui-keepalive-enabled" {},
+    /// GPUI 界面文字：协议层 keepalive 间隔（秒）。
+    UiKeepaliveInterval = "ui-keepalive-interval" {},
+    /// GPUI 界面文字：连续无回应次数。
+    UiKeepaliveMaxMisses = "ui-keepalive-max-misses" {},
+    /// GPUI 界面文字：空闲保活。
+    UiIdleKeepalive = "ui-idle-keepalive" {},
+    /// GPUI 界面文字：空闲保活间隔（秒）。
+    UiIdleInterval = "ui-idle-interval" {},
+    /// GPUI 界面文字：空闲时发送的字符串。
+    UiIdleString = "ui-idle-string" {},
+    /// GPUI 界面文字：开。
+    UiOn = "ui-on" {},
     /// GPUI 界面文字：Locale 只能包含字母、数字和 _ - . @，长度 1 到 64。
     UiLocaleMayOnlyContainLetters = "ui-locale-may-only-contain-letters" {},
     /// GPUI 界面文字：保存失败。
@@ -638,6 +660,12 @@ messages! {
     UiCreate = "ui-create" {},
     /// GPUI 界面文字：重命名分组
     UiRenameGroup = "ui-rename-group" {},
+    /// GPUI 界面文字：重命名标签
+    UiRenameTab = "ui-rename-tab" {},
+    /// GPUI 界面文字：标签名称
+    UiTabName = "ui-tab-name" {},
+    /// GPUI 界面文字：留空以恢复默认标题。
+    UiRenameTabHint = "ui-rename-tab-hint" {},
     /// GPUI 界面文字：重命名
     UiRename2 = "ui-rename-2" {},
     /// GPUI 界面文字：删除
@@ -1501,4 +1529,20 @@ messages! {
     WinMcpTabOpened = "win-mcp-tab-opened" { client: String },
     /// MCP 正在操作标签时的标记提示。
     WinMcpTabActivity = "win-mcp-tab-activity" { client: String, tool: String },
+    /// MCP 工具使用的标签参数。
+    WinMcpTabId = "win-mcp-tab-id" { id: String },
+    /// 复制 MCP 标签引用的菜单项。
+    WinMcpCopyTab = "win-mcp-copy-tab" {},
+    /// 审计记录中的命令与输入。
+    WinMcpAuditCommand = "win-mcp-audit-command" {},
+    /// 审计记录中的终端输入。
+    WinMcpAuditInput = "win-mcp-audit-input" {},
+    /// 审计记录中的命令或输入提交状态。
+    WinMcpAuditSubmitted = "win-mcp-audit-submitted" {},
+    /// 审计记录中的未发送状态。
+    WinMcpAuditNotSent = "win-mcp-audit-not-sent" {},
+    /// 审计记录中无法确认的发送状态。
+    WinMcpAuditUnconfirmed = "win-mcp-audit-unconfirmed" {},
+    /// 刷新已翻页的 MCP 审计记录。
+    WinMcpAuditRefresh = "win-mcp-audit-refresh" {},
 }

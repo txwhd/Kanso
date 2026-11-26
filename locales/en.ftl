@@ -249,6 +249,22 @@ ui-locale = Locale
 
 ui-proxy-command = ProxyCommand
 
+ui-keepalive-enabled = Protocol keepalive
+
+ui-keepalive-interval = Interval (s)
+
+ui-keepalive-max-misses = Misses before disconnect
+
+ui-idle-keepalive = Idle keepalive
+
+ui-idle-interval = Idle interval (s)
+
+ui-idle-string = Idle string
+
+ui-on = On
+
+ui-keepalive-interval-invalid = Keepalive intervals must be numbers from 1 to 86400.
+
 ui-choose = Choose…
 
 ui-cancel = Cancel
@@ -513,6 +529,8 @@ ui-quit = Quit
 
 ui-edit-session-2 = Edit Session…
 
+ui-reconnect = Reconnect
+
 ui-close = Close
 
 ui-close-others = Close Others
@@ -675,6 +693,12 @@ ui-group-name = Group name
 ui-create = Create
 
 ui-rename-group = Rename Group
+
+ui-rename-tab = Rename Tab
+
+ui-tab-name = Tab name
+
+ui-rename-tab-hint = Leave blank to restore the default title.
 
 ui-rename-2 = Rename
 
@@ -839,6 +863,8 @@ ui-file-browser = File Browser
 
 ui-palette-tabs = Tabs
 ui-palette-sessions = Sessions
+ui-sidebar-tabs = Tabs
+ui-sidebar-sessions = Sessions
 ui-palette-commands = Commands
 ui-palette-hint = Search tabs, sessions, commands, files
 ui-search-empty = No matches
@@ -1007,3 +1033,11 @@ win-mcp-calls = { $count ->
 win-mcp-status-indicator = MCP · { $count }
 win-mcp-tab-opened = Opened by MCP · { $client }
 win-mcp-tab-activity = { $client } · { $tool }
+win-mcp-tab-id = MCP tab ID ({ $id })
+win-mcp-copy-tab = Copy MCP Tab Reference
+win-mcp-audit-command = Command
+win-mcp-audit-input = Terminal input
+win-mcp-audit-submitted = Sent
+win-mcp-audit-not-sent = Rejected before sending
+win-mcp-audit-unconfirmed = Sending unconfirmed
+win-mcp-audit-refresh = Refresh activity

@@ -32,7 +32,8 @@ final class McpActivityTests: XCTestCase {
     private func record(_ id: Int64, client: String = "Claude Code", profileId: String? = nil, error: String? = nil) -> FfiMcpAuditRecord {
         FfiMcpAuditRecord(
             id: id, atMs: 1_700_000_000_000 + id, client: client, mcpSession: "s", tool: "kanso_exec",
-            profileId: profileId, sessionId: nil, args: "ls", errorCode: error, durationMs: 1, bytes: 0
+            profileId: profileId, sessionId: nil, args: "ls", input: nil, dispatch: nil,
+            errorCode: error, durationMs: 1, bytes: 0
         )
     }
 
@@ -85,6 +86,25 @@ final class McpActivityTests: XCTestCase {
         let texts = allLabels(in: content.view).map(\.stringValue)
         let head = McpText.auditHeadParts(record(2)).joined(separator: " · ") + " · NOT_AUTHORIZED"
         XCTAssertTrue(texts.contains(head), "\(texts)")
+    }
+
+    func testAuditInputShowsTheTargetAndLocalizedDispatch() {
+        let (controller, _) = makeWindow()
+        let content = controller.content
+        let input = "echo hello"
+        let record = FfiMcpAuditRecord(
+            id: 1, atMs: 1_700_000_000_000, client: "Codex", mcpSession: "s", tool: "kanso_terminal_run",
+            profileId: nil, sessionId: 3, args: "timeout_secs=2", input: input, dispatch: .submitted,
+            errorCode: "TIMEOUT", durationMs: 2_000, bytes: 0
+        )
+        content.readPage = { _ in [record] }
+        content.refreshFromStart()
+        let texts = allLabels(in: content.view).map(\.stringValue)
+        let head = McpText.auditHeadParts(record).joined(separator: " · ")
+            + " · TIMEOUT · tab=3 · " + String(localized: "Sent")
+        XCTAssertTrue(texts.contains(head), "\(texts)")
+        XCTAssertTrue(texts.contains(String(localized: "Command: \(input)")), "\(texts)")
+        XCTAssertTrue(texts.contains("timeout_secs=2"), "\(texts)")
     }
 
     private func allLabels(in view: NSView) -> [NSTextField] {
@@ -505,5 +525,13 @@ final class McpActivityTests: XCTestCase {
         let texts = allLabels(in: content.view).map(\.stringValue)
         XCTAssertTrue(texts.contains { $0.contains(String(localized: "Unauthorized session")) && $0.contains("NOT_AUTHORIZED") }, "\(texts)")
         XCTAssertTrue(texts.contains { $0.hasSuffix("· web-01") }, "成功的记录照常显示会话名：\(texts)")
+    }
+
+    func testInitialWindowUsesDefaultSize() throws {
+        let (controller, _) = makeWindow()
+        let window = try XCTUnwrap(controller.window)
+        let contentSize = window.contentRect(forFrameRect: window.frame).size
+        XCTAssertEqual(contentSize.width, 640, accuracy: 1)
+        XCTAssertEqual(contentSize.height, 520, accuracy: 1)
     }
 }

@@ -27,15 +27,16 @@ use std::time::{Duration, Instant};
 use futures::StreamExt as _;
 use futures::channel::mpsc::UnboundedReceiver;
 use gpui::{
-    Context, CursorStyle, Entity, Hsla, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, Pixels, Render, SharedString, Subscription, Window, WindowHandle, div,
-    prelude::*, px, rgba,
+    ClipboardItem, Context, CursorStyle, Entity, Hsla, KeyDownEvent, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, Render, SharedString, Subscription, Window, WindowHandle,
+    div, prelude::*, px, rgba,
 };
 use kanso_core::Core;
 use kanso_gpui::app::blocks::BlockPart;
 use kanso_gpui::app::confirm::{CloseRequest, close_dialog_spec, is_confirmed};
 use kanso_gpui::app::controller::{AppController, Effects, FALLBACK_GRID};
 use kanso_gpui::app::gutter::{GutterPolicy, ToggleOutcome, core_mode};
+use kanso_gpui::app::launcher::core_error_text;
 use kanso_gpui::app::layout::{LayoutDivider, PaneId, Rect, SplitAxis};
 use kanso_gpui::app::menus::{
     AppMenuState, TabMenuContext, app_menu, decode, tab_menu, terminal_menu,
@@ -47,7 +48,7 @@ use kanso_gpui::app::status_bar::{clock_text, ms_until_next_minute};
 use kanso_gpui::app::tab::{CloseNote, TabConnection};
 use kanso_gpui::app::workspace::{CloseConfirmation, CloseScope};
 use kanso_gpui::keys::KeyInput;
-use kanso_gpui::widgets::dialog::DialogResult;
+use kanso_gpui::widgets::dialog::{ButtonSpec, DialogResult, DialogSpec, InputSpec};
 use kanso_gpui::widgets::menu::MenuItem;
 use kanso_gpui::widgets::style::{Appearance, color, number};
 use kanso_types::{CoreEvent, PromptId, SessionId};
@@ -103,6 +104,11 @@ pub(crate) struct ShellView {
     subs: HashMap<SessionId, Subscription>,
     _window_subs: Vec<Subscription>,
     pub(super) sidebar_visible: bool,
+    /// 左侧栏当前显示「标签」还是「会话」（ui-shell.md §2.1）。
+    pub(super) sidebar_page: super::sidebar::SidebarPage,
+    /// 嵌入左侧栏「会话」页的常驻启动器实体（按需懒创建）。
+    pub(super) sidebar_sessions: Option<Entity<LauncherView>>,
+    pub(super) sidebar_sessions_sub: Option<Subscription>,
     /// 标签栏位置为顶部（ui-shell.md §2.5）。跟随外观设置，设置变化时同步。
     pub(super) tab_bar_top: bool,
     /// 顶部模式下标签条是否显示（"显示 / 隐藏标签栏"在顶部模式下切换它）。
@@ -120,6 +126,8 @@ pub(crate) struct ShellView {
     pub(super) dialog: Option<Entity<Dialog>>,
     pub(super) dialog_sub: Option<Subscription>,
     pending_close: Option<CloseRequest>,
+    /// 正在重命名的标签。
+    pending_rename_tab: Option<SessionId>,
     /// “恢复默认设置”的确认框正在显示。
     pub(super) pending_reset: bool,
     /// 状态栏时钟文字（整分钟刷新）。
@@ -222,6 +230,9 @@ impl ShellView {
             subs: HashMap::new(),
             _window_subs: Vec::new(),
             sidebar_visible: panels.sidebar_visible,
+            sidebar_page: super::sidebar::SidebarPage::Tabs,
+            sidebar_sessions: None,
+            sidebar_sessions_sub: None,
             tab_bar_top,
             top_tab_bar_visible: panels.top_tab_bar_visible,
             sidebar_preferred_width: panels.sidebar_width,
@@ -235,6 +246,7 @@ impl ShellView {
             dialog: None,
             dialog_sub: None,
             pending_close: None,
+            pending_rename_tab: None,
             pending_reset: false,
             clock: clock_text(unix_ms(), tz::local_offset_minutes()),
             notice: None,
@@ -596,7 +608,7 @@ impl ShellView {
         cx: &mut Context<Self>,
     ) {
         // 菜单或对话框打开时是模态的：快捷键不穿透。
-        if self.modal_open() {
+        if self.modal_open(cx) {
             return;
         }
         match command {
@@ -673,11 +685,25 @@ impl ShellView {
                 m.update_mouse(cx, |s| s.copy_on_select = !s.copy_on_select)
             }),
             AppCommand::Quit => self.request_quit(window, cx),
+            AppCommand::RenameTab(id) => self.open_rename_tab_dialog(id, window, cx),
             AppCommand::EditSession(id) => {
                 let profile = self.ctl.workspace().item(id).and_then(|i| i.profile);
                 if let Some(p) = profile {
                     self.open_editor(Some(p), window, cx);
                 }
+            }
+            AppCommand::ReconnectTab(id) => match self.ctl.reconnect_session(id, FALLBACK_GRID) {
+                Ok(Some(new)) => {
+                    self.attach_session(new, window, cx);
+                    // 旧标签走完整关闭流程：清终端/文件面板/MCP 引用后再移除标签。
+                    self.close_now(&[id], window, cx);
+                }
+                Ok(None) => {}
+                Err(e) => self.show_notice_str(&core_error_text(&e), cx),
+            },
+            AppCommand::CopyMcpTab(id) => {
+                let reference = format!("tab={}", id.raw());
+                cx.write_to_clipboard(ClipboardItem::new_string(reference));
             }
             AppCommand::OpenSettings => self.open_settings(cx),
             AppCommand::OpenDisplaySettings | AppCommand::OpenKeyboardSettings => {
@@ -1007,9 +1033,16 @@ impl ShellView {
     ) {
         let ws = self.ctl.workspace();
         let has = |scope| !ws.close_targets(scope, session).is_empty();
+        let profile = ws.item(session).and_then(|item| item.profile);
+        let disconnected = ws
+            .item(session)
+            .is_some_and(|item| matches!(item.connection, TabConnection::Closed(_)));
         let ctx = TabMenuContext {
             session,
-            from_profile: ws.item(session).is_some_and(|i| i.profile.is_some()),
+            from_profile: profile.is_some(),
+            disconnected,
+            mcp_addressable: profile
+                .is_some_and(|profile| self.mcp.read(cx).can_address_tab(profile)),
             has_others: has(CloseScope::Others),
             has_above: has(CloseScope::Above),
             has_below: has(CloseScope::Below),
@@ -1205,6 +1238,46 @@ impl ShellView {
         cx.notify();
     }
 
+    /// 弹出标签重命名对话框（留空恢复默认标题），结果由 [`Self::on_dialog_result`] 处理。
+    pub(super) fn open_rename_tab_dialog(
+        &mut self,
+        session: SessionId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.dialog.is_some() {
+            return;
+        }
+        let Some(item) = self.ctl.workspace().item(session) else {
+            return;
+        };
+        let initial = item.custom_title.clone().unwrap_or_default();
+        let placeholder =
+            kanso_gpui::app::tab::TabPresentation::default_title(item, self.ctl.home_dir());
+        self.menu = None;
+        self.menu_sub = None;
+        let spec = DialogSpec::new(label(Message::UiRenameTab {}))
+            .text(label(Message::UiRenameTabHint {}))
+            .input(
+                InputSpec::new("title", label(Message::UiTabName {}))
+                    .initial(&initial)
+                    .placeholder(&placeholder),
+            )
+            .button(ButtonSpec::secondary("cancel", label(Message::UiCancel {})).cancel())
+            .button(ButtonSpec::primary("ok", label(Message::UiRename2 {})));
+        let dialog = cx.new(|cx| Dialog::new(spec, window, cx));
+        self.dialog_sub =
+            Some(
+                cx.subscribe_in(&dialog, window, |this, _d, ev: &DialogEvent, window, cx| {
+                    let DialogEvent::Result(r) = ev;
+                    this.on_dialog_result(r, window, cx);
+                }),
+            );
+        self.dialog = Some(dialog);
+        self.pending_rename_tab = Some(session);
+        cx.notify();
+    }
+
     pub(super) fn on_dialog_result(
         &mut self,
         r: &DialogResult,
@@ -1213,6 +1286,15 @@ impl ShellView {
     ) {
         self.dialog = None;
         self.dialog_sub = None;
+        if let Some(session) = self.pending_rename_tab.take() {
+            if r.button.as_deref() == Some("ok") {
+                let title = r.value("title").map(str::to_owned);
+                self.ctl.rename_session(session, title);
+            }
+            self.sync_focus(window, cx);
+            cx.notify();
+            return;
+        }
         if let Some(p) = self.pending_data.take() {
             self.on_data_dialog(p, r, window, cx);
             return;
@@ -1362,7 +1444,7 @@ impl ShellView {
             }
             self.focused = want;
         }
-        if self.modal_open() {
+        if self.modal_open(cx) {
             return;
         }
         if let Some(handle) = active
@@ -1401,7 +1483,7 @@ impl ShellView {
             return;
         }
         // 浮层（启动器、编辑对话框、提示框）打开时键盘归浮层。
-        if self.modal_open() {
+        if self.modal_open(cx) {
             return;
         }
         let ks = &ev.keystroke;
@@ -1916,7 +1998,17 @@ impl Render for ShellView {
             .children(completion_el)
             .children(self.render_palette(th, window, cx))
             .children(self.menu.clone())
+            .children(
+                self.sidebar_sessions
+                    .as_ref()
+                    .and_then(|v| v.read(cx).overlay_menu()),
+            )
             .children(self.dialog.clone())
+            .children(
+                self.sidebar_sessions
+                    .as_ref()
+                    .and_then(|v| v.read(cx).overlay_dialog()),
+            )
             .children(self.filer.dialog.clone())
             .children(self.git.dialog.clone())
             .children(self.launcher.clone())

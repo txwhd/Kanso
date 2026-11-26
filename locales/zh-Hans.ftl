@@ -243,6 +243,22 @@ ui-locale = Locale
 
 ui-proxy-command = ProxyCommand
 
+ui-keepalive-enabled = 协议层保活
+
+ui-keepalive-interval = 间隔（秒）
+
+ui-keepalive-max-misses = 无回应次数上限
+
+ui-idle-keepalive = 空闲保活
+
+ui-idle-interval = 空闲间隔（秒）
+
+ui-idle-string = 空闲时发送的字符串
+
+ui-on = 开
+
+ui-keepalive-interval-invalid = 保活间隔必须是 1 到 86400 之间的数字。
+
 ui-choose = 选择…
 
 ui-cancel = 取消
@@ -507,6 +523,8 @@ ui-quit = 退出
 
 ui-edit-session-2 = 编辑会话…
 
+ui-reconnect = 重新连接
+
 ui-close = 关闭
 
 ui-close-others = 关闭其他
@@ -669,6 +687,12 @@ ui-group-name = 分组名称
 ui-create = 创建
 
 ui-rename-group = 重命名分组
+
+ui-rename-tab = 重命名标签
+
+ui-tab-name = 标签名称
+
+ui-rename-tab-hint = 留空以恢复默认标题。
 
 ui-rename-2 = 重命名
 
@@ -833,6 +857,8 @@ ui-file-browser = 文件浏览器
 
 ui-palette-tabs = 标签页
 ui-palette-sessions = 会话
+ui-sidebar-tabs = 标签
+ui-sidebar-sessions = 会话
 ui-palette-commands = 命令
 ui-palette-hint = 搜索标签页、会话、命令和文件
 ui-search-empty = 没有匹配结果
@@ -998,3 +1024,11 @@ win-mcp-calls = { $count } 次调用
 win-mcp-status-indicator = MCP · { $count }
 win-mcp-tab-opened = 由 MCP 打开 · { $client }
 win-mcp-tab-activity = { $client } · { $tool }
+win-mcp-tab-id = MCP 标签 ID（{ $id }）
+win-mcp-copy-tab = 复制 MCP 标签引用
+win-mcp-audit-command = 命令
+win-mcp-audit-input = 终端输入
+win-mcp-audit-submitted = 已发出
+win-mcp-audit-not-sent = 拒绝，未发出
+win-mcp-audit-unconfirmed = 发送状态未确认
+win-mcp-audit-refresh = 刷新活动记录

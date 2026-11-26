@@ -1301,6 +1301,7 @@ fn read_text_screen_ignores_scrolled_view_and_reports_alt_screen() {
     // 用户正在往回翻：读的仍然是当前屏幕，不是翻到的位置。
     assert!(t.read_text(ReadScope::Screen).contains("L9"));
     assert_eq!(t.read_text(ReadScope::Viewport), "L3\nL4\nL5");
+    assert_eq!(t.viewport_cursor(), None);
     assert_eq!(t.read_text(ReadScope::Recent(2)), "L8\nL9");
     assert_eq!(t.read_text(ReadScope::Viewport), "L3\nL4\nL5");
     feed(&mut t, "\x1b[?1049h\x1b[Hfull", 2);
@@ -1308,6 +1309,7 @@ fn read_text_screen_ignores_scrolled_view_and_reports_alt_screen() {
     assert_eq!(t.read_text(ReadScope::Recent(50)), "full");
     assert_eq!(t.read_text(ReadScope::Viewport), "full");
     assert_eq!(t.screen_cursor(), (0, 4));
+    assert_eq!(t.viewport_cursor(), Some((0, 4)));
 }
 
 #[test]

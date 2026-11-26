@@ -202,7 +202,7 @@ impl Core {
 pub enum ReadScope {
     /// 当前屏幕（不受滚动查看的影响）。
     Screen,
-    /// 用户当前看到的区域，包含滚动查看造成的偏移。
+    /// 用户当前滚动到的视口。
     Viewport,
     /// 回滚加屏幕的最后若干个逻辑行。
     Recent(usize),
@@ -224,6 +224,16 @@ impl Terminal {
     pub fn screen_cursor(&self) -> (u16, u16) {
         let cursor = self.core.term.grid().cursor.point;
         (cursor.line.0.max(0) as u16, cursor.column.0 as u16)
+    }
+
+    /// 光标在当前视口内的坐标；滚出视口时返回空值。
+    pub fn viewport_cursor(&self) -> Option<(u16, u16)> {
+        let grid = self.core.term.grid();
+        let cursor = grid.cursor.point;
+        let row = cursor.line.0 as i64 + grid.display_offset() as i64;
+        (0..self.core.rows as i64)
+            .contains(&row)
+            .then_some((row as u16, cursor.column.0 as u16))
     }
 
     /// 整屏清除（`clear`、⌘K、RIS）发生的累计次数。调用方记下命令开始时的值，之后比较即可知道期间是否清过屏。

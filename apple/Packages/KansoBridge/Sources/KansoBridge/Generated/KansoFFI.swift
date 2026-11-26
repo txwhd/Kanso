@@ -2270,6 +2270,11 @@ public protocol KansoCoreProtocol: AnyObject, Sendable {
     func setLocalShellDefaults(profile: FfiLocalProfile) throws 
     
     /**
+     * 设置或清除标签自定义名；会话不存在时忽略。
+     */
+    func setSessionTitle(sessionId: UInt64, title: String?) 
+    
+    /**
      * 写设置值；`json` 必须是合法 JSON。
      */
     func setSetting(key: String, json: String) throws 
@@ -3284,6 +3289,19 @@ open func setLocalShellDefaults(profile: FfiLocalProfile)throws   {try rustCallW
     uniffi_kanso_ffi_fn_method_kansocore_set_local_shell_defaults(
             self.uniffiCloneHandle(),
         FfiConverterTypeFfiLocalProfile_lower(profile),uniffiCallStatus
+    )
+}
+}
+    
+    /**
+     * 设置或清除标签自定义名；会话不存在时忽略。
+     */
+open func setSessionTitle(sessionId: UInt64, title: String?)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_kanso_ffi_fn_method_kansocore_set_session_title(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(sessionId),
+        FfiConverterOptionString.lower(title),uniffiCallStatus
     )
 }
 }
@@ -6051,6 +6069,115 @@ public func FfiConverterTypeFfiKbdQuestion_lower(_ value: FfiKbdQuestion) -> Rus
 
 
 /**
+ * SSH 保活配置（ssh.md §2.4）。
+ */
+public struct FfiKeepaliveConfig: Equatable, Hashable {
+    /**
+     * 是否启用协议层 keepalive。
+     */
+    public var enabled: Bool
+    /**
+     * 协议层 keepalive 间隔秒数。
+     */
+    public var intervalSecs: UInt16
+    /**
+     * 连续多少次无回应判定断线。
+     */
+    public var maxMisses: UInt16
+    /**
+     * 是否在空闲时向 shell 发送保活字符串。
+     */
+    public var idleEnabled: Bool
+    /**
+     * 网络空闲多少秒后发送一次。
+     */
+    public var idleIntervalSecs: UInt16
+    /**
+     * 空闲时发送的字符串（支持 \r \n \t \\ 转义）。
+     */
+    public var idleString: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * 是否启用协议层 keepalive。
+         */enabled: Bool, 
+        /**
+         * 协议层 keepalive 间隔秒数。
+         */intervalSecs: UInt16, 
+        /**
+         * 连续多少次无回应判定断线。
+         */maxMisses: UInt16, 
+        /**
+         * 是否在空闲时向 shell 发送保活字符串。
+         */idleEnabled: Bool, 
+        /**
+         * 网络空闲多少秒后发送一次。
+         */idleIntervalSecs: UInt16, 
+        /**
+         * 空闲时发送的字符串（支持 \r \n \t \\ 转义）。
+         */idleString: String) {
+        self.enabled = enabled
+        self.intervalSecs = intervalSecs
+        self.maxMisses = maxMisses
+        self.idleEnabled = idleEnabled
+        self.idleIntervalSecs = idleIntervalSecs
+        self.idleString = idleString
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension FfiKeepaliveConfig: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiKeepaliveConfig: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiKeepaliveConfig {
+        return
+            try FfiKeepaliveConfig(
+                enabled: FfiConverterBool.read(from: &buf), 
+                intervalSecs: FfiConverterUInt16.read(from: &buf), 
+                maxMisses: FfiConverterUInt16.read(from: &buf), 
+                idleEnabled: FfiConverterBool.read(from: &buf), 
+                idleIntervalSecs: FfiConverterUInt16.read(from: &buf), 
+                idleString: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FfiKeepaliveConfig, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.enabled, into: &buf)
+        FfiConverterUInt16.write(value.intervalSecs, into: &buf)
+        FfiConverterUInt16.write(value.maxMisses, into: &buf)
+        FfiConverterBool.write(value.idleEnabled, into: &buf)
+        FfiConverterUInt16.write(value.idleIntervalSecs, into: &buf)
+        FfiConverterString.write(value.idleString, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiKeepaliveConfig_lift(_ buf: RustBuffer) throws -> FfiKeepaliveConfig {
+    return try FfiConverterTypeFfiKeepaliveConfig.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiKeepaliveConfig_lower(_ value: FfiKeepaliveConfig) -> RustBuffer {
+    return FfiConverterTypeFfiKeepaliveConfig.lower(value)
+}
+
+
+/**
  * 一次按键。IME 组字期间的按键不要发；IME 上屏文字走 `text_input`。
  */
 public struct FfiKeyEvent: Equatable, Hashable {
@@ -6381,7 +6508,7 @@ public func FfiConverterTypeFfiMcpActivity_lower(_ value: FfiMcpActivity) -> Rus
  */
 public struct FfiMcpAuditFilter: Equatable, Hashable {
     /**
-     * 只看某个客户端名称（精确匹配）。
+     * 只看名称包含此文本的客户端，忽略大小写。
      */
     public var client: String?
     /**
@@ -6405,7 +6532,7 @@ public struct FfiMcpAuditFilter: Equatable, Hashable {
     // declare one manually.
     public init(
         /**
-         * 只看某个客户端名称（精确匹配）。
+         * 只看名称包含此文本的客户端，忽略大小写。
          */client: String?, 
         /**
          * 只看某个会话配置。
@@ -6508,9 +6635,17 @@ public struct FfiMcpAuditRecord: Equatable, Hashable {
      */
     public var sessionId: UInt64?
     /**
-     * 参数摘要（命令文本、路径）。
+     * 参数摘要，如超时和路径。
      */
     public var args: String
+    /**
+     * 命令或按键摘要。
+     */
+    public var input: String?
+    /**
+     * 输入的发送状态，旧记录可能没有。
+     */
+    public var dispatch: FfiMcpAuditDispatch?
     /**
      * 错误码；成功为空。
      */
@@ -6549,8 +6684,14 @@ public struct FfiMcpAuditRecord: Equatable, Hashable {
          * 目标标签或无界面会话的运行时 id。
          */sessionId: UInt64?, 
         /**
-         * 参数摘要（命令文本、路径）。
+         * 参数摘要，如超时和路径。
          */args: String, 
+        /**
+         * 命令或按键摘要。
+         */input: String?, 
+        /**
+         * 输入的发送状态，旧记录可能没有。
+         */dispatch: FfiMcpAuditDispatch?, 
         /**
          * 错误码；成功为空。
          */errorCode: String?, 
@@ -6568,6 +6709,8 @@ public struct FfiMcpAuditRecord: Equatable, Hashable {
         self.profileId = profileId
         self.sessionId = sessionId
         self.args = args
+        self.input = input
+        self.dispatch = dispatch
         self.errorCode = errorCode
         self.durationMs = durationMs
         self.bytes = bytes
@@ -6597,6 +6740,8 @@ public struct FfiConverterTypeFfiMcpAuditRecord: FfiConverterRustBuffer {
                 profileId: FfiConverterOptionString.read(from: &buf), 
                 sessionId: FfiConverterOptionUInt64.read(from: &buf), 
                 args: FfiConverterString.read(from: &buf), 
+                input: FfiConverterOptionString.read(from: &buf), 
+                dispatch: FfiConverterOptionTypeFfiMcpAuditDispatch.read(from: &buf), 
                 errorCode: FfiConverterOptionString.read(from: &buf), 
                 durationMs: FfiConverterUInt32.read(from: &buf), 
                 bytes: FfiConverterUInt64.read(from: &buf)
@@ -6612,6 +6757,8 @@ public struct FfiConverterTypeFfiMcpAuditRecord: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.profileId, into: &buf)
         FfiConverterOptionUInt64.write(value.sessionId, into: &buf)
         FfiConverterString.write(value.args, into: &buf)
+        FfiConverterOptionString.write(value.input, into: &buf)
+        FfiConverterOptionTypeFfiMcpAuditDispatch.write(value.dispatch, into: &buf)
         FfiConverterOptionString.write(value.errorCode, into: &buf)
         FfiConverterUInt32.write(value.durationMs, into: &buf)
         FfiConverterUInt64.write(value.bytes, into: &buf)
@@ -7729,9 +7876,13 @@ public struct FfiSessionInfo: Equatable, Hashable {
      */
     public var kind: FfiSessionKind
     /**
-     * 显示名。
+     * 默认显示名。
      */
     public var name: String
+    /**
+     * 用户或 MCP 设置的自定义标签名；`None` 表示使用默认标题。
+     */
+    public var customTitle: String?
     /**
      * 当前状态。
      */
@@ -7750,8 +7901,11 @@ public struct FfiSessionInfo: Equatable, Hashable {
          * 会话种类。
          */kind: FfiSessionKind, 
         /**
-         * 显示名。
+         * 默认显示名。
          */name: String, 
+        /**
+         * 用户或 MCP 设置的自定义标签名；`None` 表示使用默认标题。
+         */customTitle: String?, 
         /**
          * 当前状态。
          */state: FfiSessionState) {
@@ -7759,6 +7913,7 @@ public struct FfiSessionInfo: Equatable, Hashable {
         self.profile = profile
         self.kind = kind
         self.name = name
+        self.customTitle = customTitle
         self.state = state
     }
 
@@ -7782,6 +7937,7 @@ public struct FfiConverterTypeFfiSessionInfo: FfiConverterRustBuffer {
                 profile: FfiConverterOptionString.read(from: &buf), 
                 kind: FfiConverterTypeFfiSessionKind.read(from: &buf), 
                 name: FfiConverterString.read(from: &buf), 
+                customTitle: FfiConverterOptionString.read(from: &buf), 
                 state: FfiConverterTypeFfiSessionState.read(from: &buf)
         )
     }
@@ -7791,6 +7947,7 @@ public struct FfiConverterTypeFfiSessionInfo: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.profile, into: &buf)
         FfiConverterTypeFfiSessionKind.write(value.kind, into: &buf)
         FfiConverterString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.customTitle, into: &buf)
         FfiConverterTypeFfiSessionState.write(value.state, into: &buf)
     }
 }
@@ -8318,6 +8475,10 @@ public struct FfiSshTarget: Equatable, Hashable {
      * ProxyCommand；与 `jump` 互斥。
      */
     public var proxyCommand: String?
+    /**
+     * 保活配置。
+     */
+    public var keepalive: FfiKeepaliveConfig
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -8342,7 +8503,10 @@ public struct FfiSshTarget: Equatable, Hashable {
          */jump: String?, 
         /**
          * ProxyCommand；与 `jump` 互斥。
-         */proxyCommand: String?) {
+         */proxyCommand: String?, 
+        /**
+         * 保活配置。
+         */keepalive: FfiKeepaliveConfig) {
         self.host = host
         self.port = port
         self.user = user
@@ -8350,6 +8514,7 @@ public struct FfiSshTarget: Equatable, Hashable {
         self.privateKeyPath = privateKeyPath
         self.jump = jump
         self.proxyCommand = proxyCommand
+        self.keepalive = keepalive
     }
 
     
@@ -8374,7 +8539,8 @@ public struct FfiConverterTypeFfiSshTarget: FfiConverterRustBuffer {
                 auth: FfiConverterTypeFfiAuthMethod.read(from: &buf), 
                 privateKeyPath: FfiConverterOptionString.read(from: &buf), 
                 jump: FfiConverterOptionString.read(from: &buf), 
-                proxyCommand: FfiConverterOptionString.read(from: &buf)
+                proxyCommand: FfiConverterOptionString.read(from: &buf), 
+                keepalive: FfiConverterTypeFfiKeepaliveConfig.read(from: &buf)
         )
     }
 
@@ -8386,6 +8552,7 @@ public struct FfiConverterTypeFfiSshTarget: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.privateKeyPath, into: &buf)
         FfiConverterOptionString.write(value.jump, into: &buf)
         FfiConverterOptionString.write(value.proxyCommand, into: &buf)
+        FfiConverterTypeFfiKeepaliveConfig.write(value.keepalive, into: &buf)
     }
 }
 
@@ -10927,6 +11094,91 @@ public func FfiConverterTypeFfiMcpAccess_lift(_ buf: RustBuffer) throws -> FfiMc
 #endif
 public func FfiConverterTypeFfiMcpAccess_lower(_ value: FfiMcpAccess) -> RustBuffer {
     return FfiConverterTypeFfiMcpAccess.lower(value)
+}
+
+
+
+/**
+ * 审计记录中输入的发送状态。
+ */
+
+public enum FfiMcpAuditDispatch: Equatable, Hashable {
+    
+    /**
+     * 在发送前被拒绝。
+     */
+    case rejected
+    /**
+     * 未能确认是否发出。
+     */
+    case unconfirmed
+    /**
+     * 输入已发出。
+     */
+    case submitted
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FfiMcpAuditDispatch: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFfiMcpAuditDispatch: FfiConverterRustBuffer {
+    typealias SwiftType = FfiMcpAuditDispatch
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FfiMcpAuditDispatch {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .rejected
+        
+        case 2: return .unconfirmed
+        
+        case 3: return .submitted
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: FfiMcpAuditDispatch, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .rejected:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .unconfirmed:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .submitted:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiMcpAuditDispatch_lift(_ buf: RustBuffer) throws -> FfiMcpAuditDispatch {
+    return try FfiConverterTypeFfiMcpAuditDispatch.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFfiMcpAuditDispatch_lower(_ value: FfiMcpAuditDispatch) -> RustBuffer {
+    return FfiConverterTypeFfiMcpAuditDispatch.lower(value)
 }
 
 
@@ -13644,6 +13896,30 @@ fileprivate struct FfiConverterOptionTypeFfiSessionInfo: FfiConverterRustBuffer 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFfiMcpAuditDispatch: FfiConverterRustBuffer {
+    typealias SwiftType = FfiMcpAuditDispatch?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFfiMcpAuditDispatch.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFfiMcpAuditDispatch.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFfiXmodemBlock: FfiConverterRustBuffer {
     typealias SwiftType = FfiXmodemBlock?
 
@@ -14541,6 +14817,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_kanso_ffi_checksum_method_kansocore_set_local_shell_defaults() != 19650) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_kanso_ffi_checksum_method_kansocore_set_session_title() != 40291) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_kanso_ffi_checksum_method_kansocore_set_setting() != 57606) {
