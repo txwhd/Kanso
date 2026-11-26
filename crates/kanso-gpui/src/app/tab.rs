@@ -254,6 +254,12 @@ impl TabPresentation {
         Self::default_title(item, home_dir)
     }
 
+    /// 按完整标签主标题筛选，忽略大小写和查询首尾空白。
+    pub fn matches_title_filter(title: &str, query: &str) -> bool {
+        let query = query.trim();
+        query.is_empty() || title.to_lowercase().contains(&query.to_lowercase())
+    }
+
     /// 副标题：
     /// - 未改名：本地且有 Git 分支 → 分支名；否则 `None`（不在仓库里不显示，也不重复显示目录）。
     /// - 已改名：保留上下文——SSH / SFTP 显示原会话名（与自定义名不同时）；
@@ -746,6 +752,25 @@ mod tests {
         // SSH 不拿名称冒充路径。
         assert!(!TabPresentation::matches_path_filter(&ssh(), "prod"));
         assert!(TabPresentation::matches_path_filter(&ssh(), ""));
+    }
+
+    #[test]
+    fn title_filter_uses_displayed_names_before_truncation() {
+        let mut tab = local(Some(r"C:\Work\Kanso"));
+        let title = TabPresentation::primary_title(&tab, r"C:\Work");
+        assert!(TabPresentation::matches_title_filter(&title, "  KANSO  "));
+        assert!(!TabPresentation::matches_title_filter(&title, "Work"));
+        tab.custom_title = Some("运维 Terminal".into());
+        let title = TabPresentation::primary_title(&tab, r"C:\Work");
+        assert!(TabPresentation::matches_title_filter(
+            &title,
+            "运维 terminal"
+        ));
+        assert!(!TabPresentation::matches_title_filter(&title, "Kanso"));
+        assert!(TabPresentation::matches_title_filter(
+            &TabPresentation::primary_title(&ssh(), ""),
+            "prod",
+        ));
     }
 
     #[test]

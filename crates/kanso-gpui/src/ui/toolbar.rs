@@ -518,32 +518,6 @@ impl ShellView {
             )
             .child(
                 div()
-                    .id("toolbar-search")
-                    .occlude()
-                    .flex_1()
-                    .max_w(px(240.))
-                    .h(px(22.))
-                    .flex()
-                    .items_center()
-                    .gap(px(6.))
-                    .px(px(8.))
-                    .rounded(px(6.))
-                    .border_1()
-                    .border_color(th.c("border.field"))
-                    .bg(th.c("bg.field"))
-                    .text_color(th.c("text.tertiary"))
-                    .cursor_pointer()
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, _: &MouseDownEvent, w, cx| {
-                            this.run_command(AppCommand::OpenPalette, w, cx)
-                        }),
-                    )
-                    .child(icon("search", 12., th.c("text.tertiary")))
-                    .child(render_message(&Message::UiSearch {})),
-            )
-            .child(
-                div()
                     .flex()
                     .flex_none()
                     .items_center()

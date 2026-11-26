@@ -198,8 +198,8 @@ secret-store-failed = 无法访问凭据存储：{ $detail }
 ui-local-shell = Shell
 ui-shell-default = 系统默认
 ui-shell-custom = 自定义命令
-ui-filter-path = 按路径筛选
-ui-no-matching-paths = 没有匹配的路径
+ui-filter-tab-name = 搜索标签名称
+ui-no-matching-tabs = 没有匹配的标签
 
 ui-session = 会话
 
@@ -208,6 +208,13 @@ ui-ssh-connection = SSH 连接
 ui-local-session = 本地 Shell
 
 ui-new-session = 新建会话
+ui-sidebar-create = 新建
+ui-open-local-terminal = 打开本地终端
+ui-sidebar-local-terminal = 本地终端
+ui-new-ssh-connection = 新建 SSH 连接
+ui-new-sftp-connection = 新建 SFTP 连接
+ui-collapse-all-groups = 全部折叠
+ui-expand-all-groups = 全部展开
 
 ui-edit-session = 编辑会话
 

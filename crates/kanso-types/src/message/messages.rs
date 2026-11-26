@@ -290,6 +290,20 @@ messages! {
     UiLocalSession = "ui-local-session" {},
     /// GPUI 会话页面：新建会话。
     UiNewSession = "ui-new-session" {},
+    /// 侧栏底部的新建菜单。
+    UiSidebarCreate = "ui-sidebar-create" {},
+    /// 新建菜单：打开本地终端。
+    UiOpenLocalTerminal = "ui-open-local-terminal" {},
+    /// 常驻会话页顶部的本地终端入口。
+    UiSidebarLocalTerminal = "ui-sidebar-local-terminal" {},
+    /// 新建菜单：打开 SSH 表单。
+    UiNewSshConnection = "ui-new-ssh-connection" {},
+    /// 新建菜单：打开 SFTP 表单。
+    UiNewSftpConnection = "ui-new-sftp-connection" {},
+    /// 折叠侧栏的全部会话分组。
+    UiCollapseAllGroups = "ui-collapse-all-groups" {},
+    /// 展开侧栏的全部会话分组。
+    UiExpandAllGroups = "ui-expand-all-groups" {},
     /// GPUI 会话页面：编辑会话。
     UiEditSession = "ui-edit-session" {},
     /// GPUI 会话页面：类型。
@@ -362,10 +376,10 @@ messages! {
     UiShellCommand = "ui-shell-command" {},
     /// 自定义 Shell 命令（可带参数）。
     UiShellCustom = "ui-shell-custom" {},
-    /// 侧栏路径筛选占位文字（ui-shell.md §2）。
-    UiFilterPath = "ui-filter-path" {},
-    /// 侧栏路径筛选无匹配项。
-    UiNoMatchingPaths = "ui-no-matching-paths" {},
+    /// 侧栏标签名称筛选占位文字（ui-shell.md §2）。
+    UiFilterTabName = "ui-filter-tab-name" {},
+    /// 侧栏标签名称筛选无匹配项。
+    UiNoMatchingTabs = "ui-no-matching-tabs" {},
     /// GPUI 界面文字：跟随系统
     UiFollowSystem = "ui-follow-system" {},
     /// GPUI 界面文字：语言

@@ -133,6 +133,8 @@ pub struct LauncherSection {
     pub group: Option<Group>,
     /// 当前是否折叠；搜索时匹配项临时展开。
     pub collapsed: bool,
+    /// 匹配搜索的会话数，折叠后也保留。
+    pub profile_count: usize,
     /// 可见的组内会话（按名称自然排序）。
     pub profiles: Vec<Profile>,
 }
@@ -204,6 +206,7 @@ impl<S: ProfileStore> LauncherModel<S> {
             sections.push(LauncherSection {
                 group: None,
                 collapsed: false,
+                profile_count: ungrouped.len(),
                 profiles: ungrouped,
             });
         }
@@ -216,6 +219,7 @@ impl<S: ProfileStore> LauncherModel<S> {
             sections.push(LauncherSection {
                 group: Some(group.clone()),
                 collapsed,
+                profile_count: members.len(),
                 profiles: if collapsed { Vec::new() } else { members },
             });
         }
@@ -278,6 +282,16 @@ impl<S: ProfileStore> LauncherModel<S> {
     pub fn toggle_group(&mut self, id: GroupId) {
         if !self.collapsed_groups.remove(&id) {
             self.collapsed_groups.insert(id);
+        }
+        self.filter_snapshot();
+    }
+
+    /// 批量展开或折叠所有分组，只刷新一次列表。
+    pub fn set_groups_collapsed(&mut self, collapsed: bool) {
+        self.collapsed_groups.clear();
+        if collapsed {
+            self.collapsed_groups
+                .extend(self.groups.iter().map(|group| group.id));
         }
         self.filter_snapshot();
     }

@@ -204,8 +204,8 @@ secret-store-failed = Can’t access the credential store: { $detail }
 ui-local-shell = Shell
 ui-shell-default = System default
 ui-shell-custom = Custom command
-ui-filter-path = Filter by path
-ui-no-matching-paths = No matching paths
+ui-filter-tab-name = Search tabs by name
+ui-no-matching-tabs = No matching tabs
 
 ui-session = Session
 
@@ -214,6 +214,13 @@ ui-ssh-connection = SSH Connection
 ui-local-session = Local Shell
 
 ui-new-session = New Session
+ui-sidebar-create = New
+ui-open-local-terminal = Open Local Terminal
+ui-sidebar-local-terminal = Local Terminal
+ui-new-ssh-connection = New SSH Connection
+ui-new-sftp-connection = New SFTP Connection
+ui-collapse-all-groups = Collapse All Groups
+ui-expand-all-groups = Expand All Groups
 
 ui-edit-session = Edit Session
 

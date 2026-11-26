@@ -248,7 +248,11 @@ fn resolve_tab(
     let access = check_access(core, profile, need)?;
     // 每次现算：祖先链不缓存（pid 会被复用），见 `ClientIdentity`。
     let own = identity.probe().is_own(&status);
-    Ok(Resolved { status, access, own })
+    Ok(Resolved {
+        status,
+        access,
+        own,
+    })
 }
 
 /// 按**当前**的总开关与级别判断 `profile` 是否允许 `need` 级别的操作，返回当前级别。
@@ -1156,11 +1160,20 @@ impl KansoHandler {
             Some(params.tab),
             args,
             |target| async move {
-                let Resolved { status, access, own } = self
+                let Resolved {
+                    status,
+                    access,
+                    own,
+                } = self
                     .resolve_any(session, McpAccess::ReadOnly, &target)
                     .await?;
                 Ok(tab_json(
-                    &status.info, Some(&status), own, &self.shared.tabs, access, &self.shared.gate,
+                    &status.info,
+                    Some(&status),
+                    own,
+                    &self.shared.tabs,
+                    access,
+                    &self.shared.gate,
                 ))
             },
         )

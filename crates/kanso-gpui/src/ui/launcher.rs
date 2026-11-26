@@ -1,7 +1,7 @@
 //! 会话启动器浮层（ui-shell.md §4）：新建本地 shell / 新建会话、搜索、按分组列出已保存的会话。
 //!
 //! 行为对照 mac 版 `Sessions/SessionLauncherViewController.swift`：
-//! - 单击会话行或回车连接；行尾「…」与右键是同一菜单（编辑、移到分组、删除）。「…」只在悬停或键盘高亮时挂上，避免隐形按钮挡住单击。
+//! - 单击会话行或回车连接。侧栏会话的管理操作由右键菜单提供。浮层保留「…」菜单。
 //! - "已保存的会话"标题旁的"…"菜单：新建分组、导入 OpenSSH 配置；每个分组标题旁的"…"：重命名、删除；
 //! - 搜索框始终有焦点：输入即过滤且不滚动，↑↓ 移动选中并滚入可见，回车连接选中项，Esc 关闭。
 //!
@@ -22,12 +22,13 @@ use kanso_gpui::app::launcher::{
 };
 use kanso_gpui::app::sessions::LauncherModel;
 use kanso_gpui::widgets::dialog::{ButtonSpec, DialogResult, DialogSpec, InputSpec};
+use kanso_gpui::widgets::menu::{MenuItem, measure};
 use kanso_gpui::widgets::style::{Appearance, number};
-use kanso_types::profile::{Group, Profile};
+use kanso_types::profile::{Group, Profile, ProfileKind, SessionKind};
 use kanso_types::{GroupId, ProfileId};
 
 use super::log;
-use super::shell::Theme;
+use super::shell::{ShellView, Theme};
 use super::widgets::dialog::{Dialog, DialogEvent};
 use super::widgets::icons::icon;
 use super::widgets::menu::{ContextMenu, MenuEvent};
@@ -41,6 +42,7 @@ const PANEL_MAX_H: f32 = 480.0;
 const ACTION_ROW_H: f32 = 34.0;
 const PROFILE_ROW_H: f32 = 52.0;
 const HEADER_ROW_H: f32 = 30.0;
+const SIDEBAR_FOOTER_H: f32 = 48.0;
 
 /// 启动器向宿主发出的事件。
 #[derive(Clone, Debug)]
@@ -52,7 +54,7 @@ pub(crate) enum LauncherEvent {
     /// 新建本地 shell 标签。
     OpenLocal,
     /// 打开新建会话对话框。
-    NewSession,
+    NewSession(SessionKind),
     /// 连接已保存的会话。
     Connect(ProfileId),
     /// 编辑已保存的会话。
@@ -67,6 +69,8 @@ enum MenuTarget {
     Profile(ProfileId),
     Group(Group),
     Saved,
+    Local,
+    Create,
 }
 
 /// 正在等待结果的对话框。
@@ -276,6 +280,7 @@ impl LauncherView {
         if self.menu.is_some() || self.dialog.is_some() {
             return;
         }
+        let mut at = at;
         let items = match &target {
             MenuTarget::Profile(id) => match self.model.profile(*id) {
                 Some(p) => logic::profile_menu(p, self.model.groups()),
@@ -283,6 +288,23 @@ impl LauncherView {
             },
             MenuTarget::Group(_) => logic::group_menu(),
             MenuTarget::Saved => logic::saved_menu(),
+            MenuTarget::Local => vec![MenuItem::action(
+                "customize-shell",
+                t(&Message::UiCustomizeShell {}),
+            )],
+            MenuTarget::Create => {
+                let items = vec![
+                    MenuItem::action("local", t(&Message::UiOpenLocalTerminal {})),
+                    MenuItem::action("ssh", t(&Message::UiNewSshConnection {})),
+                    MenuItem::action("sftp", t(&Message::UiNewSftpConnection {})),
+                ];
+                let (_, height, _) = measure(&items);
+                at = gpui::point(
+                    px(10.),
+                    (window.viewport_size().height - px(SIDEBAR_FOOTER_H + height)).max(px(0.)),
+                );
+                items
+            }
         };
         let menu = cx.new(|cx| ContextMenu::new(items, at, window, cx));
         self._menu_sub =
@@ -294,6 +316,7 @@ impl LauncherView {
                         (MenuEvent::Activate(id), Some(target)) => {
                             this.run_menu_action(&target, id, window, cx)
                         }
+                        (_, Some(MenuTarget::Create)) => this.close(window, cx),
                         _ => this.focus_search(window, cx),
                     }
                     cx.notify();
@@ -322,10 +345,17 @@ impl LauncherView {
                 Some(GroupAction::Delete) => self.confirm_delete_group(group.clone(), window, cx),
                 None => self.focus_search(window, cx),
             },
+            MenuTarget::Local => cx.emit(LauncherEvent::CustomizeShell),
             MenuTarget::Saved => match logic::parse_saved_action(id) {
                 Some(SavedAction::NewGroup) => self.new_group_dialog(window, cx),
                 Some(SavedAction::ImportSshConfig) => cx.emit(LauncherEvent::ImportSshConfig),
                 None => self.focus_search(window, cx),
+            },
+            MenuTarget::Create => match id {
+                "local" => cx.emit(LauncherEvent::OpenLocal),
+                "ssh" => cx.emit(LauncherEvent::NewSession(SessionKind::Ssh)),
+                "sftp" => cx.emit(LauncherEvent::NewSession(SessionKind::Sftp)),
+                _ => self.focus_search(window, cx),
             },
         }
     }
@@ -563,7 +593,7 @@ impl LauncherView {
         cx: &mut Context<Self>,
     ) -> gpui::AnyElement {
         let pid = p.id;
-        let show_more = selected || self.hovered_profile == Some(pid);
+        let show_more = !self.embedded && (selected || self.hovered_profile == Some(pid));
         let swatch: Hsla = match p.color {
             Some(c) => rgb((u32::from(c.r) << 16) | (u32::from(c.g) << 8) | u32::from(c.b)).into(),
             None => gpui::transparent_black(),
@@ -577,18 +607,29 @@ impl LauncherView {
         );
         div()
             .id(("profile", index))
-            .h(px(PROFILE_ROW_H))
+            .h(px(if self.embedded { 44. } else { PROFILE_ROW_H }))
             .flex_none()
-            .px(px(16.0))
+            .px(px(if self.embedded { 8. } else { 16. }))
             .flex()
             .items_center()
             .gap(px(10.0))
+            .when(self.embedded, |row| {
+                row.rounded(px(number("radius", "sidebarControl")))
+                    .when(p.group.is_some(), |row| row.ml(px(10.)))
+            })
             .cursor_pointer()
-            .when(selected, |d| d.bg(th.c("bg.tabSelected")))
+            .when(selected, |d| {
+                d.bg(th.c(if self.embedded {
+                    "bg.sidebarSelected"
+                } else {
+                    "bg.tabSelected"
+                }))
+            })
             .hover(|s| s.bg(th.c("bg.rowHover")))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, _: &MouseDownEvent, _window, cx| {
+                    cx.stop_propagation();
                     this.model.select(Some(pid));
                     cx.emit(LauncherEvent::Connect(pid));
                 }),
@@ -601,26 +642,34 @@ impl LauncherView {
                     cx.stop_propagation();
                 }),
             )
-            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
-                if *hovered {
-                    if this.hovered_profile != Some(pid) {
+            .when(!self.embedded, |row| {
+                row.on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                    if *hovered && this.hovered_profile != Some(pid) {
                         this.hovered_profile = Some(pid);
                         cx.notify();
+                    } else if !*hovered && this.hovered_profile == Some(pid) {
+                        this.hovered_profile = None;
+                        cx.notify();
                     }
-                } else if this.hovered_profile == Some(pid) {
-                    this.hovered_profile = None;
-                    cx.notify();
-                }
-            }))
-            .child(
+                }))
+            })
+            .child(if self.embedded {
+                let glyph = match &p.kind {
+                    ProfileKind::Local(_) => "square-terminal",
+                    ProfileKind::Ssh(_) => "server",
+                    ProfileKind::Sftp(_) => "folder",
+                };
+                icon(glyph, 15., th.c("text.secondary")).into_any_element()
+            } else {
                 div()
                     .relative()
                     .top(px(-7.0))
                     .w(px(10.0))
                     .h(px(10.0))
                     .rounded(px(3.0))
-                    .bg(swatch),
-            )
+                    .bg(swatch)
+                    .into_any_element()
+            })
             .child(
                 div()
                     .flex_1()
@@ -643,8 +692,19 @@ impl LauncherView {
                     .flex()
                     .items_center()
                     .h(px(24.0))
-                    .min_w(px(24.0))
-                    .when(show_more, |slot| slot.child(more)),
+                    .min_w(px(if self.embedded { 28. } else { 24. }))
+                    .justify_center()
+                    .when(show_more, |slot| slot.child(more))
+                    .when(self.embedded, |slot| {
+                        let protocol = match &p.kind {
+                            ProfileKind::Local(_) => "",
+                            ProfileKind::Ssh(_) => "SSH",
+                            ProfileKind::Sftp(_) => "SFTP",
+                        };
+                        slot.text_size(px(10.))
+                            .text_color(th.c("text.secondary"))
+                            .child(protocol)
+                    }),
             )
             .into_any_element()
     }
@@ -654,6 +714,7 @@ impl LauncherView {
         index: usize,
         group: &Group,
         collapsed: bool,
+        profile_count: usize,
         th: Theme,
         cx: &mut Context<Self>,
     ) -> gpui::AnyElement {
@@ -693,26 +754,208 @@ impl LauncherView {
                         )),
                 )
             })
-            .child(div().min_w_0().truncate().child(group.name.clone()));
+            .when(self.embedded, |title| {
+                title
+                    .gap(px(6.))
+                    .child(icon("folder", 14., th.c("text.secondary")))
+            })
+            .child(
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .when(self.embedded, |name| {
+                        name.text_size(px(number("font", "ui.body")))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                    })
+                    .child(group.name.clone()),
+            )
+            .when(self.embedded, |title| {
+                title.child(
+                    div()
+                        .flex_none()
+                        .ml_auto()
+                        .mr(px(6.))
+                        .text_color(th.c("text.secondary"))
+                        .child(profile_count.to_string()),
+                )
+            });
         div()
             .id(("group", index))
             .h(px(HEADER_ROW_H))
             .flex_none()
-            .px(px(16.0))
+            .px(px(if self.embedded { 4. } else { 16. }))
             .flex()
             .items_center()
             .justify_between()
             .text_size(px(number("font", "ui.caption")))
             .text_color(th.c("text.secondary"))
             .child(title)
-            .child(self.small_button(("group-more", index), th).on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
-                    cx.stop_propagation();
-                    this.show_menu(MenuTarget::Group(g.clone()), ev.position, window, cx);
-                }),
-            ))
+            .when(self.embedded, |row| {
+                let group = g.clone();
+                row.on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
+                        cx.stop_propagation();
+                        this.show_menu(MenuTarget::Group(group.clone()), ev.position, window, cx);
+                    }),
+                )
+            })
+            .when(!self.embedded, |row| {
+                row.child(self.small_button(("group-more", index), th).on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
+                        cx.stop_propagation();
+                        this.show_menu(MenuTarget::Group(g.clone()), ev.position, window, cx);
+                    }),
+                ))
+            })
             .into_any_element()
+    }
+}
+
+impl ShellView {
+    pub(super) fn render_sidebar_footer(&self, th: Theme, cx: &mut Context<Self>) -> gpui::Div {
+        let model = &self.sidebar_sessions.read(cx).model;
+        let has_groups = !model.groups().is_empty();
+        let collapse = model
+            .groups()
+            .iter()
+            .any(|group| !model.collapsed_groups().contains(&group.id));
+        let on_tabs = self.sidebar_page == super::sidebar::SidebarPage::Tabs;
+        let can_toggle = has_groups && (on_tabs || model.query().trim().is_empty());
+        let toggle_label = if collapse {
+            Message::UiCollapseAllGroups {}
+        } else {
+            Message::UiExpandAllGroups {}
+        };
+        let button = |id| {
+            div()
+                .id(id)
+                .h(px(34.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(number("radius", "sidebarControl")))
+                .border_1()
+                .border_color(th.c("border.field"))
+                .bg(th.c("bg.buttonSecondary"))
+        };
+        let tooltip = |message: Message| {
+            move |_: &mut Window, cx: &mut App| {
+                cx.new(|_| super::status_bar::LinesTooltip {
+                    lines: vec![t(&message).to_string()],
+                    th,
+                })
+                .into()
+            }
+        };
+        let icon_color = th.c("text.secondary");
+        div()
+            .h(px(SIDEBAR_FOOTER_H))
+            .flex_none()
+            .px(px(10.))
+            .gap(px(6.))
+            .flex()
+            .items_center()
+            .border_t_1()
+            .border_color(th.c("border.subtle"))
+            .child(
+                button("sidebar-new-session")
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(6.))
+                    .bg(th.c("bg.sidebarSelected"))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(th.c("bg.tabHover")))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, ev: &MouseDownEvent, window, cx| {
+                            cx.stop_propagation();
+                            this.sidebar_sessions.update(cx, |view, cx| {
+                                view.show_menu(MenuTarget::Create, ev.position, window, cx);
+                            });
+                        }),
+                    )
+                    .child(icon("plus", 16., icon_color))
+                    .child(
+                        div()
+                            .truncate()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .child(t(&Message::UiSidebarCreate {})),
+                    )
+                    .child(icon("chevron-down", 12., icon_color)),
+            )
+            .child(
+                button("sidebar-toggle-groups")
+                    .size(px(34.))
+                    .flex_none()
+                    .tooltip(tooltip(toggle_label))
+                    .when(can_toggle, |button| {
+                        button
+                            .cursor_pointer()
+                            .hover(|s| s.bg(th.c("bg.tabHover")))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _, window, cx| {
+                                    cx.stop_propagation();
+                                    this.show_sidebar_sessions(false, window, cx);
+                                    this.sidebar_sessions.update(cx, |view, cx| {
+                                        if on_tabs && !view.model.query().is_empty() {
+                                            view.search
+                                                .update(cx, |input, cx| input.set_text("", cx));
+                                            view.model.set_query("");
+                                        }
+                                        view.model.set_groups_collapsed(collapse);
+                                        cx.notify();
+                                    });
+                                }),
+                            )
+                    })
+                    .when(!can_toggle, |button| button.opacity(0.5))
+                    .child(
+                        div()
+                            .relative()
+                            .w(px(16.))
+                            .h(px(22.))
+                            .child(div().absolute().top_0().left(px(1.)).child(icon(
+                                if collapse {
+                                    "chevron-down"
+                                } else {
+                                    "chevron-up"
+                                },
+                                14.,
+                                icon_color,
+                            )))
+                            .child(div().absolute().bottom_0().left(px(1.)).child(icon(
+                                if collapse {
+                                    "chevron-up"
+                                } else {
+                                    "chevron-down"
+                                },
+                                14.,
+                                icon_color,
+                            ))),
+                    ),
+            )
+            .child(
+                button("sidebar-new-group")
+                    .size(px(34.))
+                    .flex_none()
+                    .tooltip(tooltip(Message::UiNewGroup2 {}))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(th.c("bg.tabHover")))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, _, window, cx| {
+                            cx.stop_propagation();
+                            this.show_sidebar_sessions(false, window, cx);
+                            this.sidebar_sessions.update(cx, |view, cx| {
+                                view.new_group_dialog(window, cx);
+                            });
+                        }),
+                    )
+                    .child(icon("folder-plus", 16., icon_color)),
+            )
     }
 }
 
@@ -731,7 +974,8 @@ impl Render for LauncherView {
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
             .flex()
-            .flex_col();
+            .flex_col()
+            .when(self.embedded, |list| list.px(px(10.)));
         if rows.is_empty() {
             let text = if self.model.has_any_profile() {
                 logic::render_message(&Message::UiNoMatchingSessions {})
@@ -750,9 +994,11 @@ impl Render for LauncherView {
         }
         for (i, row) in rows.iter().enumerate() {
             list = list.child(match row {
-                LauncherRow::Header { group, collapsed } => {
-                    self.render_header_row(i, group, *collapsed, th, cx)
-                }
+                LauncherRow::Header {
+                    group,
+                    collapsed,
+                    profile_count,
+                } => self.render_header_row(i, group, *collapsed, *profile_count, th, cx),
                 LauncherRow::Profile(p) => {
                     self.render_profile_row(i, p, selected == Some(p.id), th, cx)
                 }
@@ -794,89 +1040,48 @@ impl Render for LauncherView {
                 .key_context("Launcher")
                 .track_focus(&self.root)
                 .on_key_down(cx.listener(Self::on_key_down))
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(|this, ev: &MouseDownEvent, window, cx| {
+                        cx.stop_propagation();
+                        this.show_menu(MenuTarget::Saved, ev.position, window, cx);
+                    }),
+                )
                 .flex_1()
                 .min_h_0()
                 .flex()
                 .flex_col()
                 .text_size(px(number("font", "ui.body")))
                 .text_color(th.c("text.primary"))
-                // 顶部搜索框 + ＋ 新建按钮，与「标签」页工具条等高对齐。
                 .child(
                     div()
-                        .h(px(40.0))
+                        .h(px(48.0))
                         .flex_none()
                         .flex()
                         .items_center()
-                        .justify_between()
-                        .px(px(8.0))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .mr(px(4.0))
-                                .child(self.search.clone()),
-                        )
-                        .child(
-                            div()
-                                .id("sidebar-new-session")
-                                .w(px(24.0))
-                                .h(px(24.0))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded(px(number("radius", "sm")))
-                                .cursor_pointer()
-                                .hover(|s| {
-                                    s.bg(th.c("bg.rowHover")).text_color(th.c("text.primary"))
-                                })
-                                .on_mouse_down(
-                                    MouseButton::Left,
-                                    cx.listener(|_, _, _, cx| {
-                                        cx.stop_propagation();
-                                        cx.emit(LauncherEvent::NewSession);
-                                    }),
-                                )
-                                .child(icon("plus", 16.0, th.c("text.secondary"))),
-                        ),
+                        .px(px(10.0))
+                        .child(div().flex_1().min_w_0().child(self.search.clone())),
                 )
                 .child(
-                    div()
-                        .flex_none()
-                        .border_t_1()
-                        .border_color(th.c("border.subtle"))
-                        .pt(px(4.0))
-                        .flex()
-                        .items_center()
-                        .child(div().flex_1().min_w_0().child(self.render_action_row(
-                            "launcher-local",
+                    div().flex_none().px(px(10.)).child(
+                        self.render_action_row(
+                            "sidebar-local-terminal",
                             "square-terminal",
-                            logic::render_message(&Message::UiLocalSession {}),
+                            t(&Message::UiSidebarLocalTerminal {}),
                             th,
-                            |_this, _w, cx| cx.emit(LauncherEvent::OpenLocal),
+                            |_, _, cx| cx.emit(LauncherEvent::OpenLocal),
                             cx,
-                        )))
-                        .child(
-                            div()
-                                .id("launcher-settings")
-                                .mr(px(8.0))
-                                .size(px(24.0))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded(px(number("radius", "sm")))
-                                .cursor_pointer()
-                                .hover(|s| s.bg(th.c("bg.rowHover")))
-                                .on_mouse_down(
-                                    MouseButton::Left,
-                                    cx.listener(|_, _, _, cx| {
-                                        cx.stop_propagation();
-                                        cx.emit(LauncherEvent::CustomizeShell);
-                                    }),
-                                )
-                                .child(icon("sliders-horizontal", 15.0, th.c("text.secondary"))),
+                        )
+                        .rounded(px(number("radius", "sidebarControl")))
+                        .on_mouse_down(
+                            MouseButton::Right,
+                            cx.listener(|this, ev: &MouseDownEvent, window, cx| {
+                                cx.stop_propagation();
+                                this.show_menu(MenuTarget::Local, ev.position, window, cx);
+                            }),
                         ),
+                    ),
                 )
-                .child(saved_header)
                 .child(list);
         }
 
@@ -943,7 +1148,7 @@ impl Render for LauncherView {
                 "plus",
                 format!("{}…", logic::render_message(&Message::UiNewSession {})),
                 th,
-                |_this, _w, cx| cx.emit(LauncherEvent::NewSession),
+                |_this, _w, cx| cx.emit(LauncherEvent::NewSession(SessionKind::Ssh)),
                 cx,
             ))
             .child(

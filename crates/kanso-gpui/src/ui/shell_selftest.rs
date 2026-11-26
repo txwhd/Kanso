@@ -526,7 +526,7 @@ impl ShellView {
                     return self.st_fail("确认后标签应关闭且对话框消失".into(), cx);
                 }
                 self.st_pass("关闭确认：Tab + 回车确认后关闭标签");
-                self.run_command(AppCommand::OpenPalette, window, cx);
+                key(window, cx, "ctrl-shift-p");
             }
             20 => {
                 if self.palette.as_ref().map(|palette| palette.selected) != Some(0) {

@@ -14,6 +14,7 @@ use kanso_gpui::app::launcher::core_error_text;
 use kanso_gpui::app::prompt_dialogs::{response_for, spec_for};
 use kanso_types::ProfileId;
 use kanso_types::message::Message;
+use kanso_types::profile::SessionKind;
 
 use super::launcher::{LauncherEvent, LauncherView};
 use super::log;
@@ -33,19 +34,14 @@ impl ShellView {
             || self.filer.dialog.is_some()
             || self.git.dialog.is_some()
             || self.menu.is_some()
-            || self
-                .sidebar_sessions
-                .as_ref()
-                .is_some_and(|v| v.read(cx).has_overlay())
+            || self.sidebar_sessions.read(cx).has_overlay()
     }
 
     // ---- 侧栏会话页与启动器 ----
 
     /// 左侧栏切回「标签」页。
     pub(super) fn show_sidebar_tabs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(view) = &self.sidebar_sessions {
-            self.collapsed_launcher_groups = view.read(cx).collapsed_groups().clone();
-        }
+        self.collapsed_launcher_groups = self.sidebar_sessions.read(cx).collapsed_groups().clone();
         self.sidebar_page = super::sidebar::SidebarPage::Tabs;
         self.sync_focus(window, cx);
         cx.notify();
@@ -62,37 +58,20 @@ impl ShellView {
             self.sidebar_visible = true;
             self.save_panels();
         }
-        let view = if let Some(existing) = self.sidebar_sessions.clone() {
-            existing.update(cx, |v, cx| v.reload(cx));
-            existing
-        } else {
-            let core = self.core.clone();
-            let collapsed = self.collapsed_launcher_groups.clone();
-            let v = cx.new(|cx| LauncherView::new_embedded(core, collapsed, window, cx));
-            self.sidebar_sessions_sub =
-                Some(
-                    cx.subscribe_in(&v, window, |this, _l, ev: &LauncherEvent, window, cx| {
-                        this.on_sidebar_sessions_event(ev.clone(), window, cx)
-                    }),
-                );
-            self.sidebar_sessions = Some(v.clone());
-            v
-        };
+        self.reload_sidebar_sessions(cx);
         self.sidebar_page = super::sidebar::SidebarPage::Sessions;
         if focus_search {
-            view.read(cx).focus_search(window, cx);
+            self.sidebar_sessions.read(cx).focus_search(window, cx);
         }
         cx.notify();
     }
 
-    /// 刷新已创建的侧栏「会话」页（会话新增/编辑/导入后调用）。
+    /// 刷新侧栏的会话列表（会话新增/编辑/导入后调用）。
     pub(super) fn reload_sidebar_sessions(&mut self, cx: &mut Context<Self>) {
-        if let Some(view) = &self.sidebar_sessions {
-            view.update(cx, |v, cx| v.reload(cx));
-        }
+        self.sidebar_sessions.update(cx, |view, cx| view.reload(cx));
     }
 
-    fn on_sidebar_sessions_event(
+    pub(super) fn on_sidebar_sessions_event(
         &mut self,
         ev: LauncherEvent,
         window: &mut Window,
@@ -100,12 +79,14 @@ impl ShellView {
     ) {
         match ev {
             LauncherEvent::Close => self.sync_focus(window, cx),
-            LauncherEvent::CustomizeShell => self.present_editor(None, true, window, cx),
+            LauncherEvent::CustomizeShell => {
+                self.present_editor(None, true, SessionKind::Local, window, cx)
+            }
             LauncherEvent::OpenLocal => {
                 self.open_tab(window, cx);
                 self.show_sidebar_tabs(window, cx);
             }
-            LauncherEvent::NewSession => self.open_editor(None, window, cx),
+            LauncherEvent::NewSession(kind) => self.present_editor(None, false, kind, window, cx),
             LauncherEvent::Connect(id) => {
                 self.connect_profile(id, window, cx);
                 self.show_sidebar_tabs(window, cx);
@@ -157,9 +138,11 @@ impl ShellView {
         self.close_launcher(window, cx);
         match ev {
             LauncherEvent::Close => {}
-            LauncherEvent::CustomizeShell => self.present_editor(None, true, window, cx),
+            LauncherEvent::CustomizeShell => {
+                self.present_editor(None, true, SessionKind::Local, window, cx)
+            }
             LauncherEvent::OpenLocal => self.open_tab(window, cx),
-            LauncherEvent::NewSession => self.open_editor(None, window, cx),
+            LauncherEvent::NewSession(kind) => self.present_editor(None, false, kind, window, cx),
             LauncherEvent::Connect(id) => self.connect_profile(id, window, cx),
             LauncherEvent::Edit(id) => self.open_editor(Some(id), window, cx),
             LauncherEvent::ImportSshConfig => self.open_ssh_import(window, cx),
@@ -176,13 +159,14 @@ impl ShellView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.present_editor(profile, false, window, cx);
+        self.present_editor(profile, false, SessionKind::Ssh, window, cx);
     }
 
     fn present_editor(
         &mut self,
         profile: Option<ProfileId>,
         custom_local: bool,
+        initial_kind: SessionKind,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -204,7 +188,9 @@ impl ShellView {
             self.close_launcher(window, cx);
         }
         let core = self.core.clone();
-        let editor = cx.new(|cx| SessionEditorView::new(core, existing, custom_local, window, cx));
+        let editor = cx.new(|cx| {
+            SessionEditorView::new(core, existing, custom_local, initial_kind, window, cx)
+        });
         self.editor_sub = Some(cx.subscribe_in(
             &editor,
             window,

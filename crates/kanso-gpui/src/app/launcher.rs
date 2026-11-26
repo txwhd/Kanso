@@ -42,6 +42,8 @@ pub enum LauncherRow {
         group: Group,
         /// 当前是否折叠。
         collapsed: bool,
+        /// 分组内匹配的会话数。
+        profile_count: usize,
     },
     /// 一个会话。
     Profile(Profile),
@@ -57,6 +59,7 @@ pub fn rows(sections: &[LauncherSection]) -> Vec<LauncherRow> {
             out.push(LauncherRow::Header {
                 group: g.clone(),
                 collapsed: s.collapsed,
+                profile_count: s.profile_count,
             });
             if !s.collapsed && s.profiles.is_empty() {
                 out.push(LauncherRow::EmptyGroup);
@@ -297,11 +300,11 @@ mod tests {
         let r = rows(m.sections());
         assert!(matches!(&r[0], LauncherRow::Profile(p) if p.name == "本机"));
         assert!(
-            matches!(&r[1], LauncherRow::Header { group, collapsed: false } if group.name == "生产")
+            matches!(&r[1], LauncherRow::Header { group, collapsed: false, .. } if group.name == "生产")
         );
         assert!(matches!(&r[2], LauncherRow::Profile(p) if p.name == "db"));
         assert!(
-            matches!(&r[3], LauncherRow::Header { group, collapsed: false } if group.name == "空组")
+            matches!(&r[3], LauncherRow::Header { group, collapsed: false, .. } if group.name == "空组")
         );
         assert_eq!(r[4], LauncherRow::EmptyGroup);
         assert_eq!(r.len(), 5);
@@ -334,6 +337,32 @@ mod tests {
         assert_eq!(rows(m.sections()), collapsed);
         m.toggle_group(group.id);
         assert_eq!(row_index_of(&rows(m.sections()), profile), Some(2));
+    }
+
+    #[test]
+    fn toggling_all_groups_preserves_members_and_search() {
+        let (mut model, _) = model();
+        let before = rows(model.sections());
+        model.set_groups_collapsed(true);
+        assert_eq!(model.collapsed_groups().len(), 2);
+        assert_eq!(model.visible_profiles().len(), 1);
+        assert!(matches!(
+            rows(model.sections())[1],
+            LauncherRow::Header {
+                collapsed: true,
+                profile_count: 1,
+                ..
+            }
+        ));
+
+        model.set_query("example.com");
+        assert_eq!(model.visible_profiles()[0].name, "db");
+        model.set_query("");
+        assert_eq!(model.visible_profiles().len(), 1);
+
+        model.set_groups_collapsed(false);
+        assert!(model.collapsed_groups().is_empty());
+        assert_eq!(rows(model.sections()), before);
     }
 
     #[test]

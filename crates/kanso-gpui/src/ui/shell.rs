@@ -106,9 +106,8 @@ pub(crate) struct ShellView {
     pub(super) sidebar_visible: bool,
     /// 左侧栏当前显示「标签」还是「会话」（ui-shell.md §2.1）。
     pub(super) sidebar_page: super::sidebar::SidebarPage,
-    /// 嵌入左侧栏「会话」页的常驻启动器实体（按需懒创建）。
-    pub(super) sidebar_sessions: Option<Entity<LauncherView>>,
-    pub(super) sidebar_sessions_sub: Option<Subscription>,
+    /// 左侧栏会话页与两页共用底栏的状态。
+    pub(super) sidebar_sessions: Entity<LauncherView>,
     /// 标签栏位置为顶部（ui-shell.md §2.5）。跟随外观设置，设置变化时同步。
     pub(super) tab_bar_top: bool,
     /// 顶部模式下标签条是否显示（"显示 / 隐藏标签栏"在顶部模式下切换它）。
@@ -117,7 +116,7 @@ pub(crate) struct ShellView {
     pub(super) sidebar_resizing: bool,
     pub(super) tab_reorder: Option<kanso_gpui::app::tab::TabReorder>,
     pub(super) palette: Option<super::toolbar::Palette>,
-    pub(super) path_filter: Entity<super::widgets::text_input::TextInput>,
+    pub(super) tab_name_filter: Entity<super::widgets::text_input::TextInput>,
     drag: Option<DividerDrag>,
     /// 当前弹出的右键 / 应用菜单（最上层，同一时间只有一个）。
     pub(super) menu: Option<Entity<ContextMenu>>,
@@ -193,23 +192,24 @@ impl ShellView {
         settings.read(cx).push_to_display(cx);
         let dark = display::effective_dark(window);
         display::apply_titlebar(window);
-        let path_filter = cx.new(|cx| {
+        let tab_name_filter = cx.new(|cx| {
             super::widgets::text_input::TextInput::new(window, cx)
                 .search()
-                .placeholder(kanso_types::Message::UiFilterPath {})
+                .placeholder(kanso_types::Message::UiFilterTabName {})
         });
-        let filter_sub = cx.subscribe_in(&path_filter, window, |this, input, ev, window, cx| {
-            use super::widgets::text_input::TextInputEvent;
-            match ev {
-                TextInputEvent::Change(_) => cx.notify(),
-                TextInputEvent::Escape => {
-                    input.update(cx, |i, cx| i.set_text("", cx));
-                    this.sync_focus(window, cx);
-                    cx.notify();
+        let filter_sub =
+            cx.subscribe_in(&tab_name_filter, window, |this, input, ev, window, cx| {
+                use super::widgets::text_input::TextInputEvent;
+                match ev {
+                    TextInputEvent::Change(_) => cx.notify(),
+                    TextInputEvent::Escape => {
+                        input.update(cx, |i, cx| i.set_text("", cx));
+                        this.sync_focus(window, cx);
+                        cx.notify();
+                    }
+                    _ => {}
                 }
-                _ => {}
-            }
-        });
+            });
         let sender_panel = cx.new(|cx| super::sender::SenderPanel::new(core.clone(), window, cx));
         let sender_sub = cx.subscribe_in(
             &sender_panel,
@@ -223,6 +223,16 @@ impl ShellView {
         let panels = super::window_layout::PanelLayout::load(&core);
         let git = super::shell_git::new_state(panels.git_width, window, cx);
         let tab_bar_top = settings.read(cx).appearance().tab_bar_position == TabBarPosition::Top;
+        let sidebar_sessions =
+            cx.new(|cx| LauncherView::new_embedded(core.clone(), HashSet::new(), window, cx));
+        let sidebar_sessions_sub = cx.subscribe_in(
+            &sidebar_sessions,
+            window,
+            |this, _, ev: &super::launcher::LauncherEvent, window, cx| {
+                this.on_sidebar_sessions_event(ev.clone(), window, cx)
+            },
+        );
+        let sidebar_sessions_observer = cx.observe(&sidebar_sessions, |_, _, cx| cx.notify());
         let mut this = ShellView {
             ctl: AppController::new(core.clone(), home),
             core,
@@ -231,15 +241,14 @@ impl ShellView {
             _window_subs: Vec::new(),
             sidebar_visible: panels.sidebar_visible,
             sidebar_page: super::sidebar::SidebarPage::Tabs,
-            sidebar_sessions: None,
-            sidebar_sessions_sub: None,
+            sidebar_sessions,
             tab_bar_top,
             top_tab_bar_visible: panels.top_tab_bar_visible,
             sidebar_preferred_width: panels.sidebar_width,
             sidebar_resizing: false,
             tab_reorder: None,
             palette: None,
-            path_filter,
+            tab_name_filter,
             drag: None,
             menu: None,
             menu_sub: None,
@@ -387,6 +396,8 @@ impl ShellView {
             settings_sub,
             filter_sub,
             sender_sub,
+            sidebar_sessions_sub,
+            sidebar_sessions_observer,
             mcp_sub,
             mcp_tabs,
         ];
@@ -887,13 +898,13 @@ impl ShellView {
                     {
                         (true, false) => 0xEAF0F4FF,
                         (true, true) => 0x1C252EFF,
-                        (false, false) => 0xECECE8FF,
+                        (false, false) => 0xF0F4EFFF,
                         (false, true) => 0x0B0B0BFF,
                     };
                     let ok = this.settings_window.is_some()
                         && this.dark == expected_dark
                         && embedded_theme_ok
-                        && color("bg.sidebar", display::window_appearance(w)).to_u32()
+                        && color("bg.sidebarGpui", display::window_appearance(w)).to_u32()
                             == expected_sidebar
                         && this.active_terminal().is_some_and(|term| {
                             let term = term.read(cx);
@@ -1998,17 +2009,9 @@ impl Render for ShellView {
             .children(completion_el)
             .children(self.render_palette(th, window, cx))
             .children(self.menu.clone())
-            .children(
-                self.sidebar_sessions
-                    .as_ref()
-                    .and_then(|v| v.read(cx).overlay_menu()),
-            )
+            .children(self.sidebar_sessions.read(cx).overlay_menu())
             .children(self.dialog.clone())
-            .children(
-                self.sidebar_sessions
-                    .as_ref()
-                    .and_then(|v| v.read(cx).overlay_dialog()),
-            )
+            .children(self.sidebar_sessions.read(cx).overlay_dialog())
             .children(self.filer.dialog.clone())
             .children(self.git.dialog.clone())
             .children(self.launcher.clone())

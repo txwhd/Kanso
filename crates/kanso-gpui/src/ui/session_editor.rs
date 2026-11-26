@@ -247,6 +247,7 @@ impl SessionEditorView {
         core: Arc<Core>,
         editing: Option<Profile>,
         custom_local: bool,
+        initial_kind: SessionKind,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -270,7 +271,7 @@ impl SessionEditorView {
                 .map(|locale| locale.as_str().to_owned())
                 .unwrap_or_default();
         } else if !is_editing {
-            model.kind = SessionKind::Ssh;
+            model.kind = initial_kind;
         }
         let groups = model.groups();
         let jumps = model.jump_candidates();
