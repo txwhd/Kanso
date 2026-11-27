@@ -478,7 +478,7 @@ pub const BUILTIN_THEMES: [(&str, &str); 2] =
 pub struct AppearanceSettings {
     /// 外观模式。
     pub mode: ThemeMode,
-    /// 是否启用 Windows 现代界面配色。
+    /// 是否启用 Windows 的 Slate 界面配色。
     pub north_shore: bool,
     /// 浅色外观用的终端配色 id（未知 id 原样保留，使用处回落默认）。
     pub light_theme: String,

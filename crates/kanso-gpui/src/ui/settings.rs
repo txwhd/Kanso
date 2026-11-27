@@ -126,14 +126,7 @@ impl SettingsModel {
         BUILTIN_THEMES
             .iter()
             .map(|(id, name)| ((*id).to_owned(), (*name).to_owned()))
-            .chain(self.themes.iter().map(|t| {
-                let name = match t.id.as_str() {
-                    "bundled:windows-modern-light" => label(Message::UiWindowsModernLight {}),
-                    "bundled:windows-modern-dark" => label(Message::UiWindowsModernDark {}),
-                    _ => t.name.as_str(),
-                };
-                (t.id.clone(), name.to_owned())
-            }))
+            .chain(self.themes.iter().map(|t| (t.id.clone(), t.name.clone())))
             .collect()
     }
 
@@ -1093,7 +1086,7 @@ impl Render for SettingsView {
                         "interface-theme",
                         &[
                             label(Message::UiKansoInterfaceTheme {}),
-                            label(Message::UiWindowsModern {}),
+                            label(Message::UiSlate {}),
                         ],
                         usize::from(a.north_shore),
                         |this, i, cx| {

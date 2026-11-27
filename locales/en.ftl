@@ -307,9 +307,7 @@ ui-appearance = Appearance
 ui-theme = Mode
 ui-interface-theme = Interface theme
 ui-kanso-interface-theme = Kanso
-ui-windows-modern = Windows Modern
-ui-windows-modern-light = Windows Modern Light
-ui-windows-modern-dark = Windows Modern Dark
+ui-slate = Slate
 
 ui-light-theme = Light terminal theme
 

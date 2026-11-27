@@ -220,8 +220,10 @@ mod tests {
         assert_eq!(bundled[0].id, "bundled:classic-console");
         assert_eq!(bundled[0].name, "Classic Console");
         assert_eq!(bundled[1].id, "bundled:windows-modern-light");
+        assert_eq!(bundled[1].name, "Slate Light");
         assert_eq!(bundled[1].background, 0xF8FAFC);
         assert_eq!(bundled[2].id, "bundled:windows-modern-dark");
+        assert_eq!(bundled[2].name, "Slate Dark");
         assert_eq!(bundled[2].background, 0x12171D);
         for (i, t) in bundled.iter().enumerate() {
             assert!(t.id.starts_with("bundled:"), "{}", t.id);

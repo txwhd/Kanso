@@ -381,8 +381,8 @@ fn check_tokens(
             let north_shore =
                 (fg.windows_north_shore.is_some() || bg.windows_north_shore.is_some()).then(|| {
                     let name = match a {
-                        Appearance::Light => "Windows 现代浅色",
-                        Appearance::Dark => "Windows 现代深色",
+                        Appearance::Light => "Slate Light",
+                        Appearance::Dark => "Slate Dark",
                     };
                     (name, fg.windows_north_shore(a), bg.windows_north_shore(a))
                 });
